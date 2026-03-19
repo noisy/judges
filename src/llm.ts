@@ -1,3 +1,4 @@
+import { spawn } from 'child_process';
 import { spawnSync } from 'child_process';
 
 export interface Issue {
@@ -7,56 +8,68 @@ export interface Issue {
   message: string;
 }
 
-export function executeLLM(prompt: string): Issue[] {
-  try {
-    // We shell out to the `claude` CLI as requested by the PoC skills.
-    // Using spawnSync allows us to easily supply large prompts as arguments
-    // without as much shell escaping hassle.
-    
-    // Check if claude CLI exists
+export async function executeLLM(prompt: string): Promise<Issue[]> {
+  return new Promise((resolve, reject) => {
+    // Fast synchronous check if claude is available
     const check = spawnSync('which', ['claude'], { encoding: 'utf-8' });
     if (check.status !== 0) {
-      console.warn("WARNING: 'claude' CLI command not found. Using a mock response.");
-      return [
-        {
-          file: "dummy.ts",
-          line: 10,
-          severity: "low",
-          message: "MOCK: This is a placeholder because the claude CLI is not available."
+      // Mock response for testing without claude CLI
+      setTimeout(() => {
+        resolve([
+          {
+            file: "dummy.ts",
+            line: 10,
+            severity: "low",
+            message: "MOCK: This is a placeholder because the claude CLI is not available."
+          }
+        ]);
+      }, 1000 + Math.random() * 2000); // simulate async delay
+      return;
+    }
+
+    const child = spawn('claude', ['-p', prompt], { 
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let stdoutData = '';
+    let stderrData = '';
+
+    child.stdout.on('data', (data) => {
+      stdoutData += data.toString();
+    });
+
+    child.stderr.on('data', (data) => {
+      stderrData += data.toString();
+    });
+
+    child.on('error', (err) => {
+      reject(new Error(`Failed to spawn claude: ${err.message}`));
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0) {
+        return reject(new Error(`Claude CLI exited with status ${code}: ${stderrData}`));
+      }
+
+      const rawOutput = stdoutData.trim();
+      
+      // Extract JSON array from the response if it's wrapped in markdown
+      try {
+        let jsonStr = rawOutput;
+        const jsonMatch = rawOutput.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[0];
         }
-      ];
-    }
-
-    const result = spawnSync('claude', ['-p', prompt], { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 10 });
-    
-    if (result.error) {
-      throw result.error;
-    }
-    
-    if (result.status !== 0) {
-      throw new Error(`Claude CLI exited with status ${result.status}: ${result.stderr}`);
-    }
-
-    const rawOutput = result.stdout.trim();
-    
-    // Extract JSON array from the response if it's wrapped in markdown
-    try {
-      let jsonStr = rawOutput;
-      const jsonMatch = rawOutput.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        jsonStr = jsonMatch[0];
+        const parsed = JSON.parse(jsonStr);
+        if (Array.isArray(parsed)) {
+          resolve(parsed as Issue[]);
+        } else {
+          resolve([]);
+        }
+      } catch (e) {
+        console.error("Failed to parse LLM output as JSON. Raw output was:", rawOutput);
+        resolve([]);
       }
-      const parsed = JSON.parse(jsonStr);
-      if (Array.isArray(parsed)) {
-        return parsed as Issue[];
-      }
-      return [];
-    } catch (e) {
-      console.error("Failed to parse LLM output as JSON. Raw output was:", rawOutput);
-      return [];
-    }
-  } catch (err: any) {
-    console.error("Error executing LLM:", err.message);
-    process.exit(1);
-  }
+    });
+  });
 }

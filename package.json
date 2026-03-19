@@ -23,6 +23,7 @@
   },
   "homepage": "https://github.com/noisy/judges#readme",
   "devDependencies": {
+    "@types/log-update": "^2.0.0",
     "@types/mri": "^1.1.5",
     "@types/node": "^25.5.0",
     "husky": "^9.1.7",
@@ -31,6 +32,7 @@
   },
   "dependencies": {
     "gray-matter": "^4.0.3",
+    "log-update": "^7.2.0",
     "mri": "^1.2.0",
     "picocolors": "^1.1.1"
   },

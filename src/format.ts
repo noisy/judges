@@ -1,12 +1,10 @@
 import pc from 'picocolors';
 import { Issue } from './llm.js';
 
-export function formatTerminalOutput(judgeName: string, issues: Issue[]): string {
-  if (issues.length === 0) {
-    return `${pc.bold(pc.green('✔'))} ${pc.bold(judgeName)}: No issues found. Looks great!\n`;
-  }
+export function formatIssuesList(judgeName: string, issues: Issue[], totalIssues: number): string {
+  if (issues.length === 0) return '';
 
-  let output = `${pc.bold(pc.red('✘'))} ${pc.bold(judgeName)} found ${issues.length} issue(s):\n\n`;
+  let output = `${pc.bold(pc.red('✘'))} ${pc.bold(judgeName)} Issues:\n\n`;
 
   for (const issue of issues) {
     let severityTag = '';
@@ -31,6 +29,11 @@ export function formatTerminalOutput(judgeName: string, issues: Issue[]): string
     // Use an indent for the message to look neat
     const indentedMessage = issue.message.split('\n').map(l => `      ${l}`).join('\n');
     output += `${indentedMessage}\n\n`;
+  }
+
+  if (totalIssues > issues.length) {
+     const diff = totalIssues - issues.length;
+     output += `  ... and ${diff} more issues. (Use --full or --top to see more)\n\n`;
   }
 
   return output;
