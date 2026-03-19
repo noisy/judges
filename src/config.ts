@@ -5,6 +5,9 @@ export const SEVERITY_SCORE: Record<string, number> = { high: 3, medium: 2, low:
 
 export interface AppConfig {
   file?: string | string[];
+  paths: string[];
+  staged: boolean;
+  diff: boolean;
   json: boolean;
   short: boolean;
   full: boolean;
@@ -16,7 +19,7 @@ export interface AppConfig {
 export function parseArgs(argv: string[]): AppConfig {
   const parsed = mri(argv, {
     string: ['file', 'top'],
-    boolean: ['json', 'help', 'short', 'full'],
+    boolean: ['json', 'help', 'short', 'full', 'staged', 'diff'],
     alias: {
       f: 'file',
       j: 'json',
@@ -36,8 +39,20 @@ export function parseArgs(argv: string[]): AppConfig {
     if (isNaN(visibleIssueLimit)) visibleIssueLimit = DEFAULT_MAX_ISSUES_TO_SHOW;
   }
 
+  const paths = parsed._ || [];
+
+  if (paths.length > 0 && (parsed.staged || parsed.diff)) {
+    console.warn("Warning: Positional paths and git diff flags (--staged, --diff) were both provided. Falling back to paths.");
+  }
+  if (parsed.staged && parsed.diff) {
+    console.warn("Warning: Both --staged and --diff were provided. Defaulting to --staged.");
+  }
+
   return {
     file: parsed.file,
+    paths,
+    staged: !!parsed.staged,
+    diff: !!parsed.diff,
     json: !!parsed.json,
     short: !!parsed.short,
     full: !!parsed.full,

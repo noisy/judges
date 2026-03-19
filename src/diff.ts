@@ -1,12 +1,17 @@
 import { execSync } from 'child_process';
 
-export function extractDiff(): string {
+export function extractDiff(mode: 'staged' | 'diff' | 'head' = 'head'): string {
   try {
-    // Get diff of staged and unstaged changes, and untracked files if needed
-    // For this PoC, we will just use `git diff HEAD` or `git diff`
-    const diff = execSync('git diff HEAD', { encoding: 'utf-8' });
+    let command = 'git diff HEAD';
+    if (mode === 'staged') {
+      command = 'git diff --cached';
+    } else if (mode === 'diff') {
+      command = 'git diff';
+    }
+
+    const diff = execSync(command, { encoding: 'utf-8' });
     if (!diff.trim()) {
-      return "No git diff found. Make sure you have uncommitted changes or use --file mode.";
+      return `No git diff found (${command}). Make sure you have uncommitted changes or use path mode (e.g., 'judge .').`;
     }
     return diff;
   } catch (error: any) {

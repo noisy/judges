@@ -23,10 +23,20 @@ Options:
 }
 
 function resolveInputContext(config: AppConfig): string {
+  if (config.paths.length > 0) {
+    return readFiles(config.paths);
+  }
   if (config.file) {
     return readFiles(config.file);
   }
-  return extractDiff();
+  
+  if (config.staged) {
+    return extractDiff('staged');
+  } else if (config.diff) {
+    return extractDiff('diff');
+  }
+
+  return extractDiff('head');
 }
 
 async function orchestrateEvaluation(judges: Judge[], inputContext: string, config: AppConfig): Promise<any[]> {
