@@ -8,24 +8,53 @@ export interface Issue {
   message: string;
 }
 
-export async function executeLLM(prompt: string): Promise<Issue[]> {
-  return new Promise((resolve, reject) => {
-    // Fast synchronous check if claude is available
-    const check = spawnSync('which', ['claude'], { encoding: 'utf-8' });
-    if (check.status !== 0) {
-      // Mock response for testing without claude CLI
-      setTimeout(() => {
-        resolve([
-          {
-            file: "dummy.ts",
-            line: 10,
-            severity: "low",
-            message: "MOCK: This is a placeholder because the claude CLI is not available."
-          }
-        ]);
-      }, 1000 + Math.random() * 2000); // simulate async delay
-      return;
+export const MOCK_DELAY_BASE_MS = 1000;
+export const MOCK_DELAY_RANGE_MS = 2000;
+
+export function checkLLMAvailability(): boolean {
+  const check = spawnSync('which', ['claude'], { encoding: 'utf-8' });
+  return check.status === 0;
+}
+
+export async function mockLLMResponse(): Promise<Issue[]> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve([
+        {
+          file: "dummy.ts",
+          line: 10,
+          severity: "low",
+          message: "MOCK: This is a placeholder because the claude CLI is not available."
+        }
+      ]);
+    }, MOCK_DELAY_BASE_MS + Math.random() * MOCK_DELAY_RANGE_MS);
+  });
+}
+
+export function parseLLMOutput(rawOutput: string): Issue[] {
+  try {
+    let jsonStr = rawOutput;
+    const jsonMatch = rawOutput.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      jsonStr = jsonMatch[0];
     }
+    const parsed = JSON.parse(jsonStr);
+    if (Array.isArray(parsed)) {
+      return parsed as Issue[];
+    }
+    return [];
+  } catch (e) {
+    console.error("Failed to parse LLM output as JSON. Raw output was:", rawOutput);
+    return [];
+  }
+}
+
+export async function executeLLM(prompt: string): Promise<Issue[]> {
+  if (!checkLLMAvailability()) {
+    return mockLLMResponse();
+  }
+
+  return new Promise((resolve, reject) => {
 
     const child = spawn('claude', ['-p', prompt], { 
       stdio: ['ignore', 'pipe', 'pipe']
@@ -52,24 +81,7 @@ export async function executeLLM(prompt: string): Promise<Issue[]> {
       }
 
       const rawOutput = stdoutData.trim();
-      
-      // Extract JSON array from the response if it's wrapped in markdown
-      try {
-        let jsonStr = rawOutput;
-        const jsonMatch = rawOutput.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          jsonStr = jsonMatch[0];
-        }
-        const parsed = JSON.parse(jsonStr);
-        if (Array.isArray(parsed)) {
-          resolve(parsed as Issue[]);
-        } else {
-          resolve([]);
-        }
-      } catch (e) {
-        console.error("Failed to parse LLM output as JSON. Raw output was:", rawOutput);
-        resolve([]);
-      }
+      resolve(parseLLMOutput(rawOutput));
     });
   });
 }

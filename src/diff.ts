@@ -15,7 +15,9 @@ export function extractDiff(mode: 'staged' | 'diff' | 'head' = 'head'): string {
     }
     return diff;
   } catch (error: any) {
-    console.error("Error extracting git diff:", error.message);
-    process.exit(1);
+    if (error.message.includes('fatal: ')) {
+      throw new Error(`Git error: ${error.message}`);
+    }
+    throw new Error(`Error extracting git diff: ${error.message}`);
   }
 }

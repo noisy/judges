@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { readFiles } from '../../src/files.js';
+import { resolvePaths, readContents } from '../../src/files.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -24,7 +24,10 @@ describe('File Resolution and Traversal', () => {
     vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false, isFile: () => true, size: 100 } as any);
     vi.mocked(fs.readFileSync).mockReturnValue('fake content');
 
-    const result = readFiles('src/test.ts');
+    const paths = resolvePaths('src/test.ts');
+    expect(paths).toEqual([expect.stringContaining('src/test.ts')]);
+    
+    const result = readContents(paths);
     expect(result).toContain('--- File: src/test.ts ---');
     expect(result).toContain('fake content');
   });
@@ -33,18 +36,13 @@ describe('File Resolution and Traversal', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false, isFile: () => true, size: 2 * 1024 * 1024 } as any); // 2MB
     
-    // Process should exit because no valid files are found, so we mock process.exit
-    const exitMock = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
-    const consoleErrorMock = vi.spyOn(console, 'error').mockImplementation(() => {});
     const consoleWarnMock = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    readFiles('src/huge.ts');
+    expect(() => {
+      resolvePaths('src/huge.ts');
+    }).toThrow('No valid files found or all files were ignored.');
     
     expect(consoleWarnMock).toHaveBeenCalledWith(expect.stringContaining('File size limit exceeded'));
-    expect(exitMock).toHaveBeenCalledWith(1);
-    
-    exitMock.mockRestore();
-    consoleErrorMock.mockRestore();
     consoleWarnMock.mockRestore();
   });
 
@@ -58,15 +56,10 @@ describe('File Resolution and Traversal', () => {
       return { isDirectory: () => false, isFile: () => true, size: 100 } as any;
     });
 
-    const exitMock = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
-    const consoleErrorMock = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    readFiles('node_modules'); // Should skip it, resulting in 0 files found
+    expect(() => {
+      resolvePaths('node_modules'); // Should skip it, resulting in 0 files found
+    }).toThrow('No valid files found or all files were ignored.');
 
     expect(fs.readdirSync).not.toHaveBeenCalled();
-    expect(exitMock).toHaveBeenCalledWith(1);
-
-    exitMock.mockRestore();
-    consoleErrorMock.mockRestore();
   });
 });

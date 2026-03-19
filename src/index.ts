@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs, AppConfig } from './config.js';
 import { extractDiff } from './diff.js';
-import { readFiles } from './files.js';
+import { resolvePaths, readContents } from './files.js';
 import { discoverJudges, Judge } from './judges.js';
 import { ProgressRenderer, JudgeProgress } from './ui.js';
 import { runJudgesParallel } from './runner.js';
@@ -24,10 +24,12 @@ Options:
 
 function resolveInputContext(config: AppConfig): string {
   if (config.paths.length > 0) {
-    return readFiles(config.paths);
+    const paths = resolvePaths(config.paths);
+    return readContents(paths);
   }
   if (config.file) {
-    return readFiles(config.file);
+    const paths = resolvePaths(config.file);
+    return readContents(paths);
   }
   
   if (config.staged) {
@@ -84,7 +86,17 @@ async function main() {
     return;
   }
 
-  const inputContext = resolveInputContext(config);
+  let inputContext = '';
+  try {
+    inputContext = resolveInputContext(config);
+  } catch (error: any) {
+    if (!config.json) {
+      console.error(colors.red(`\n❌ Error: ${error.message}\n`));
+    }
+    process.exit(1);
+    return;
+  }
+  
   const judges = discoverJudges();
   
   if (judges.length === 0) {
