@@ -28,6 +28,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "gray-matter": "^4.0.3",
     "mri": "^1.2.0"
   },
   "type": "module"
