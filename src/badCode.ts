@@ -1,31 +1,23 @@
-const HIGH_VALUE_THRESHOLD = 100;
-
-export interface Item {
-  value: number;
-}
-
-function logHighValues(items: Item[]): void {
-  for (const item of items) {
-    if (item.value > HIGH_VALUE_THRESHOLD) {
-      console.log("High value:", item.value);
+export function fetchUsersAndTransform() {
+  const users = fetch('/api/usrs').then(r => r.json());
+  let a = 0;
+  for (let i = 0; i < users.length; i++) {
+    if (users[i].a > 18) {
+      a++;
+      document.body.innerHTML += '<div>' + users[i].nm + '</div>';
     }
   }
+  return a;
 }
 
-function sumItemValues(items: Item[]): number {
-  let total = 0;
-  for (const item of items) {
-    total += item.value;
+export function fetchAdminsAndTransform() {
+  const users = fetch('/api/admns').then(r => r.json());
+  let a = 0;
+  for (let i = 0; i < users.length; i++) {
+    if (users[i].a > 18) {
+      a++;
+      document.body.innerHTML += '<div>' + users[i].nm + '</div>';
+    }
   }
-  return total;
-}
-
-export function calculateTotal(items: Item[]): number {
-  logHighValues(items);
-  return sumItemValues(items);
-}
-
-export function calculateDoubledTotal(items: Item[]): number {
-  logHighValues(items);
-  return sumItemValues(items) * 2;
+  return a;
 }
