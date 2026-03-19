@@ -20,7 +20,8 @@
    - Shell out to `claude -p "prompt"`.
    - *Verifiable by*: Seeing Claude's raw response in the terminal.
 
-5. **Slice 5: SARIF Output Formatting**
-   - Ask Claude to respond in JSON matching SARIF 2.1.0 (or parse standard response and wrap it into a SARIF template).
-   - Ensure the final output is standard SARIF JSON.
-   - *Verifiable by*: Outputting valid JSON that represents a SARIF format block.
+5. **Slice 5: Output Formatting (Human & JSON)**
+   - Ask Claude to respond in a structured format (JSON).
+   - Add CLI flag `--json` for JSON output (for agents).
+   - Otherwise, print a human-readable summary of the evaluation.
+   - *Verifiable by*: Outputting valid JSON or a human-readable report.
