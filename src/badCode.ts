@@ -1,23 +1,36 @@
-export function fetchUsersAndTransform() {
-  const users = fetch('/api/usrs').then(r => r.json());
-  let a = 0;
-  for (let i = 0; i < users.length; i++) {
-    if (users[i].a > 18) {
-      a++;
-      document.body.innerHTML += '<div>' + users[i].nm + '</div>';
-    }
-  }
-  return a;
+const ADULT_AGE_THRESHOLD = 18;
+
+interface User {
+  age: number;
+  name: string;
 }
 
-export function fetchAdminsAndTransform() {
-  const users = fetch('/api/admns').then(r => r.json());
-  let a = 0;
-  for (let i = 0; i < users.length; i++) {
-    if (users[i].a > 18) {
-      a++;
-      document.body.innerHTML += '<div>' + users[i].nm + '</div>';
+export async function fetchUsers(): Promise<User[]> {
+  const response = await fetch('/api/users');
+  return response.json();
+}
+
+export async function fetchAdmins(): Promise<User[]> {
+  const response = await fetch('/api/admins');
+  return response.json();
+}
+
+export function filterAdultUsers(users: User[]): User[] {
+  const adultUsers: User[] = [];
+  for (const user of users) {
+    if (user.age > ADULT_AGE_THRESHOLD) {
+      adultUsers.push(user);
     }
   }
-  return a;
+  return adultUsers;
+}
+
+export function countUsers(users: User[]): number {
+  return users.length;
+}
+
+export function renderUserNamesToDom(users: User[]): void {
+  for (const user of users) {
+    document.body.innerHTML += `<div>${user.name}</div>`;
+  }
 }
