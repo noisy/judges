@@ -44,6 +44,7 @@ Options:
   // console.log(inputContext.substring(0, 500) + (inputContext.length > 500 ? "...\n[truncated]" : ""));
 
   // Execution and Formatting (Slice 3 & 4)
+  const judges = discoverJudges();
   const results: any[] = [];
   
   if (!args.json) {
