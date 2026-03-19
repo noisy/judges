@@ -5,6 +5,7 @@ import { readFiles } from './files.js';
 import { discoverJudges } from './judges.js';
 import { constructPrompt } from './prompt.js';
 import { executeLLM } from './llm.js';
+import { formatTerminalOutput } from './format.js';
 
 async function main() {
   const argv = process.argv.slice(2);
@@ -59,16 +60,16 @@ Options:
     // In json mode, we still need to prompt the LLM. 
     // Usually it takes time, so silence is fine for JSON mode until the end
     const prompt = constructPrompt(j, inputContext);
-    const output = executeLLM(prompt);
+    const issues = executeLLM(prompt);
     
     results.push({
       judge: j.name || j.id,
       file: j.filePath,
-      review: output
+      issues: issues
     });
 
     if (!args.json) {
-      console.log(`\n[${j.name || j.id} Feedback]\n${output}\n`);
+      console.log(formatTerminalOutput(j.name || j.id, issues));
     }
   }
 

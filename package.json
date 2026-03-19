@@ -29,7 +29,8 @@
   },
   "dependencies": {
     "gray-matter": "^4.0.3",
-    "mri": "^1.2.0"
+    "mri": "^1.2.0",
+    "picocolors": "^1.1.1"
   },
   "type": "module"
 }
