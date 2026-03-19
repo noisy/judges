@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseArgs } from './config.js';
+import { parseArgs } from '../../src/config.js';
 
 describe('CLI Configuration Parsing', () => {
   it('should parse default boolean flags correctly', () => {

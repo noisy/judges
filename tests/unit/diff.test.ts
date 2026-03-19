@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { extractDiff } from './diff.js';
+import { extractDiff } from '../../src/diff.js';
 import * as child_process from 'child_process';
 
 vi.mock('child_process', () => ({

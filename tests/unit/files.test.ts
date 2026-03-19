@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { readFiles } from './files.js';
+import { readFiles } from '../../src/files.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
