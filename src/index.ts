@@ -2,6 +2,7 @@
 import mri from 'mri';
 import { extractDiff } from './diff.js';
 import { readFiles } from './files.js';
+import { discoverJudges } from './judges.js';
 
 async function main() {
   const argv = process.argv.slice(2);
@@ -37,10 +38,20 @@ Options:
   }
 
   // Output for verification (Slice 1)
-  console.log("--- Extracting Input (Slice 1 Verification) ---");
-  console.log(inputContext.substring(0, 500) + (inputContext.length > 500 ? "...\n[truncated]" : ""));
+  // console.log("--- Extracting Input (Slice 1 Verification) ---");
+  // console.log(inputContext.substring(0, 500) + (inputContext.length > 500 ? "...\n[truncated]" : ""));
 
-  // The rest (Judges discovery, Prompt construction, Execution) will come in later slices.
+  // Output for verification (Slice 2)
+  console.log("--- Discovering Judges (Slice 2 Verification) ---");
+  const judges = discoverJudges();
+  console.log(`Found ${judges.length} judge(s):`);
+  for (const j of judges) {
+    console.log(`- ${j.name || j.id} from ${j.filePath}`);
+    console.log(`  Description: ${j.description || 'N/A'}`);
+    console.log(`  Instructions: ${j.instructions}`);
+  }
+
+  // The rest (Prompt construction, Execution) will come in later slices.
 }
 
 main().catch(error => {
