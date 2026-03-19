@@ -4,22 +4,28 @@ export interface Item {
   value: number;
 }
 
-function processItemsAndSum(items: Item[]): number {
+function logHighValues(items: Item[]): void {
+  for (const item of items) {
+    if (item.value > HIGH_VALUE_THRESHOLD) {
+      console.log("High value:", item.value);
+    }
+  }
+}
+
+function sumItemValues(items: Item[]): number {
   let total = 0;
   for (const item of items) {
     total += item.value;
-    if (item.value > HIGH_VALUE_THRESHOLD) {
-      console.log("High value:", item.value);
-      // We removed the hidden global mutation side-effect to respect Clean Architecture
-    }
   }
   return total;
 }
 
 export function calculateTotal(items: Item[]): number {
-  return processItemsAndSum(items);
+  logHighValues(items);
+  return sumItemValues(items);
 }
 
 export function calculateDoubledTotal(items: Item[]): number {
-  return processItemsAndSum(items) * 2;
+  logHighValues(items);
+  return sumItemValues(items) * 2;
 }
