@@ -3,6 +3,7 @@ import { Judge } from './judges.js';
 export function constructPrompt(judge: Judge, inputContext: string): string {
   return `You are acting as an AI judge verifying code quality or other criteria.
 You MUST output your review in strict JSON format. Do not include any other text, markdown formatting (no \`\`\`json wrappers), or explanations outside of the JSON array.
+You MUST write all your evaluation messages in English.
 
 Your output must be a JSON array of objects. Each object represents an issue you found, matching this exact schema:
 [
