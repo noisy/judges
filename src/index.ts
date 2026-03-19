@@ -97,6 +97,22 @@ async function main() {
   if (config.json) {
     console.log(JSON.stringify(results, null, 2));
   }
+
+  let hasHighSeverityIssue = false;
+  for (const progress of results) {
+    if (progress.issues) {
+      for (const issue of progress.issues) {
+        if (issue.severity && issue.severity.toLowerCase() === 'high') {
+          hasHighSeverityIssue = true;
+        }
+      }
+    }
+  }
+
+  if (hasHighSeverityIssue) {
+    console.log(colors.red("\n❌ Execution blocked: One or more HIGH severity issues were found by the judges. Please fix them."));
+    process.exit(1);
+  }
 }
 
 main().catch((error) => {
