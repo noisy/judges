@@ -1,27 +1,25 @@
-export function calcThng(x: any) {
-  let a = 0;
-  for(let i=0; i< x.length; i++) {
-    a += x[i].z;
-    // Do some complex parsing that violates SRP
-    if (x[i].z > 100) {
-      console.log("High value:", x[i].z);
-      globalThis.someSecretFlag = true;
-    }
-  }
-  return a;
+const HIGH_VALUE_THRESHOLD = 100;
+
+export interface Item {
+  value: number;
 }
 
-export function calcThng2(x: any) {
-  let a = 0;
-  for(let i=0; i< x.length; i++) {
-    a += x[i].z;
-    // Do some complex parsing that violates SRP
-    if (x[i].z > 100) {
-      console.log("High value:", x[i].z);
-      globalThis.someSecretFlag = true;
+function processItemsAndSum(items: Item[]): number {
+  let total = 0;
+  for (const item of items) {
+    total += item.value;
+    if (item.value > HIGH_VALUE_THRESHOLD) {
+      console.log("High value:", item.value);
+      // We removed the hidden global mutation side-effect to respect Clean Architecture
     }
   }
-  return a * 2;
+  return total;
 }
 
-const req = { usrData: { id: 1 } };
+export function calculateTotal(items: Item[]): number {
+  return processItemsAndSum(items);
+}
+
+export function calculateDoubledTotal(items: Item[]): number {
+  return processItemsAndSum(items) * 2;
+}
