@@ -21,7 +21,6 @@ export class ProgressRenderer {
   constructor(private readonly progressList: JudgeProgress[]) {}
 
   public start(): void {
-    console.log(colors.bold("\n--- Starting Judges Evaluation ---\n"));
     this.interval = setInterval(() => {
       this.frameIdx = (this.frameIdx + 1) % this.frames.length;
       this.render();
@@ -32,37 +31,46 @@ export class ProgressRenderer {
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
-      this.render(); // final frame
+      this.render();
       logUpdate.done();
+
+      const allIssues = this.progressList.flatMap(p => p.issues ?? []);
+      const errors = allIssues.filter(i => i.severity === 'high').length;
+      const warnings = allIssues.filter(i => i.severity === 'medium').length;
+      const infos = allIssues.filter(i => i.severity === 'low').length;
+      const total = allIssues.length;
+
+      if (total === 0) {
+        console.log(colors.green('✓ 0 problems'));
+      } else {
+        const parts: string[] = [];
+        if (errors > 0) parts.push(`${errors} error${errors !== 1 ? 's' : ''}`);
+        if (warnings > 0) parts.push(`${warnings} warning${warnings !== 1 ? 's' : ''}`);
+        if (infos > 0) parts.push(`${infos} info`);
+        console.log(colors.red(`✗ ${total} problem${total !== 1 ? 's' : ''}`) + ` (${parts.join(', ')})`);
+      }
     }
   }
 
   private render(): void {
-    let output = '';
+    const segments: string[] = [];
     for (const p of this.progressList) {
+      const name = p.displayName;
       if (p.state === 'pending') {
-        output += `  ${colors.gray('○')} ${p.displayName}\n`;
+        segments.push(colors.dim(name));
       } else if (p.state === 'running') {
-        output += `  ${colors.yellow(this.frames[this.frameIdx])} ${colors.cyan(p.displayName)} evaluating...\n`;
+        segments.push(`${colors.yellow(this.frames[this.frameIdx])} ${colors.cyan(name)}`);
       } else if (p.state === 'done') {
-         const issueCount = p.issues?.length || 0;
-         if (issueCount === 0) {
-            output += `  ${colors.green('✔')} ${p.displayName}: 0 issues\n`;
-         } else {
-            const highs = p.issues!.filter(i => i.severity === 'high').length;
-            const meds = p.issues!.filter(i => i.severity === 'medium').length;
-            const lows = p.issues!.filter(i => i.severity === 'low').length;
-            const summaryParts = [
-               highs > 0 ? colors.red(`${highs} High`) : '',
-               meds > 0 ? colors.yellow(`${meds} Med`) : '',
-               lows > 0 ? colors.blue(`${lows} Low`) : ''
-            ].filter(Boolean);
-            const summary = summaryParts.join(', ');
-            
-            output += `  ${colors.red('✘')} ${colors.bold(p.displayName)}: ${issueCount} issues (${summary})\n`;
-         }
+        const count = p.issues?.length ?? 0;
+        if (count === 0) {
+          segments.push(`${colors.green('✓')} ${name}`);
+        } else {
+          segments.push(`${colors.red('✗')} ${name} ${colors.dim(`(${count})`)}`);
+        }
+      } else if (p.state === 'error') {
+        segments.push(`${colors.red('!')} ${name}`);
       }
     }
-    logUpdate(output);
+    logUpdate(segments.join('  '));
   }
 }

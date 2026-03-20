@@ -4,36 +4,41 @@ import { Issue } from './llm.js';
 export function formatIssuesList(judgeName: string, issues: Issue[], totalIssues: number): string {
   if (issues.length === 0) return '';
 
-  let output = `${pc.bold(pc.red('✘'))} ${pc.bold(judgeName)} Issues:\n\n`;
-
+  const grouped = new Map<string, Issue[]>();
   for (const issue of issues) {
-    let severityTag = '';
-    switch (issue.severity?.toLowerCase()) {
-      case 'high':
-        severityTag = pc.bgRed(pc.white(pc.bold(' HIGH ')));
-        break;
-      case 'medium':
-        severityTag = pc.bgYellow(pc.black(pc.bold(' MED  ')));
-        break;
-      case 'low':
-        severityTag = pc.bgBlue(pc.white(pc.bold(' LOW  ')));
-        break;
-      default:
-        severityTag = pc.gray(pc.white(pc.bold(' INFO ')));
-        break;
-    }
+    const file = issue.file || '(unknown)';
+    if (!grouped.has(file)) grouped.set(file, []);
+    grouped.get(file)!.push(issue);
+  }
 
-    const fileLine = pc.cyan(`${issue.file}:${issue.line}`);
-    output += `  ${severityTag} ${fileLine}\n`;
-    
-    // Use an indent for the message to look neat
-    const indentedMessage = issue.message.split('\n').map(l => `      ${l}`).join('\n');
-    output += `${indentedMessage}\n\n`;
+  let output = '';
+
+  for (const [file, fileIssues] of grouped) {
+    output += `${pc.underline(file)}\n`;
+    for (const issue of fileIssues) {
+      const line = issue.line ?? 0;
+      const loc = pc.dim(`${line}:`);
+      let severityLabel: string;
+      switch (issue.severity?.toLowerCase()) {
+        case 'high':
+          severityLabel = pc.red('error');
+          break;
+        case 'medium':
+          severityLabel = pc.yellow('warning');
+          break;
+        default:
+          severityLabel = pc.dim('info');
+          break;
+      }
+      const msg = issue.message.split('\n')[0];
+      output += `  ${loc}  ${severityLabel}  ${msg}  ${pc.dim(judgeName)}\n`;
+    }
+    output += '\n';
   }
 
   if (totalIssues > issues.length) {
-     const diff = totalIssues - issues.length;
-     output += `  ... and ${diff} more issues. (Use --full or --top to see more)\n\n`;
+    const diff = totalIssues - issues.length;
+    output += `  ${pc.dim(`... and ${diff} more issues. (Use --full or --top to see more)`)}\n\n`;
   }
 
   return output;
