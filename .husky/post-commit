@@ -1,0 +1,4 @@
+npm run test
+
+# Run AI code quality review silently on the commit that just happened
+npx tsx src/index.ts --last-commit

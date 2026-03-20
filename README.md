@@ -74,13 +74,31 @@ The system will automatically discover any `JUDGE.md` files in those directories
 
 ---
 
-## Automated Pre-Commit Workflow
+## 🚦 The "Green, Refactor" Workflow (Recommended)
 
-We highly recommend using Husky or another Git hook manager to automate `judge`.
+By default, `judge-cli` is **non-blocking**. Even if it finds high severity code smells, it will exit gracefully (Exit Code `0`).
 
-**Fast Pre-Commit Hook (`.husky/pre-commit`):**
-```bash
-# Run judge on staged files using the fast --short mode
-npx tsx src/index.ts --short
+We highly recommend connecting Judges to your Git `post-commit` hook. This enforces a "Green -> Refactor" workflow:
+1. You make the code work and commit it.
+2. The `post-commit` hook instantly triggers the Judges to evaluate what you just committed using the `--last-commit` flag.
+3. You review the AI feedback, refactor the code based on the insights, and make a follow-up commit.
+
+**Setup in Husky (`.husky/post-commit`):**
+```sh
+npx judge --last-commit
 ```
-This blocks bad code from being committed and encourages continuous, incremental quality improvements.
+
+### Strict Gatekeeper Mode (`--fail-on`)
+
+If you want the judges to act as rigid gatekeepers that physically block code from entering your repository, you can move them to a `pre-commit` hook and enforce the `--fail-on` flag:
+
+**Setup in Husky (`.husky/pre-commit`):**
+```sh
+npm run test
+npx judge --staged --fail-on high
+```
+
+The `--fail-on` flag accepts:
+- `high`: Blocks commit if any `High` severity issue is found.
+- `medium` (or `med`): Blocks on `High` or `Medium` severity.
+- `low`: Blocks on virtually any issue found.

@@ -15,12 +15,14 @@ export interface AppConfig {
   help: boolean;
   version: boolean;
   visibleIssueLimit: number;
+  failOn?: string;
+  lastCommit: boolean;
 }
 
 export function parseArgs(argv: string[]): AppConfig {
   const parsed = mri(argv, {
-    string: ['file', 'top'],
-    boolean: ['json', 'help', 'version', 'short', 'full', 'staged', 'diff'],
+    string: ['file', 'top', 'fail-on'],
+    boolean: ['json', 'help', 'version', 'short', 'full', 'staged', 'diff', 'last-commit'],
     alias: {
       f: 'file',
       j: 'json',
@@ -43,12 +45,17 @@ export function parseArgs(argv: string[]): AppConfig {
 
   const paths = parsed._ || [];
 
-  if (paths.length > 0 && (parsed.staged || parsed.diff)) {
-    console.warn("Warning: Positional paths and git diff flags (--staged, --diff) were both provided. Falling back to paths.");
+  if (paths.length > 0 && (parsed.staged || parsed.diff || parsed['last-commit'])) {
+    console.warn("Warning: Positional paths and git diff flags (--staged, --diff, --last-commit) were both provided. Falling back to paths.");
   }
-  if (parsed.staged && parsed.diff) {
-    console.warn("Warning: Both --staged and --diff were provided. Defaulting to --staged.");
+  
+  const activeDiffFlags = [parsed.staged, parsed.diff, parsed['last-commit']].filter(Boolean).length;
+  if (activeDiffFlags > 1) {
+    console.warn("Warning: Multiple git diff flags provided (--staged, --diff, --last-commit). Defaulting to the most strict requirement.");
   }
+  
+  let failOn = parsed['fail-on']?.toLowerCase();
+  if (failOn === 'med') failOn = 'medium';
 
   return {
     file: parsed.file,
@@ -62,5 +69,7 @@ export function parseArgs(argv: string[]): AppConfig {
     help: !!parsed.help,
     version: !!parsed.version,
     visibleIssueLimit,
+    failOn,
+    lastCommit: !!parsed['last-commit'],
   };
 }

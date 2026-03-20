@@ -41,6 +41,8 @@ function resolveInputContext(config: AppConfig): string {
     return extractDiff('staged');
   } else if (config.diff) {
     return extractDiff('diff');
+  } else if (config.lastCommit) {
+    return extractDiff('last-commit');
   }
 
   return extractDiff('head');
@@ -120,20 +122,28 @@ async function main() {
     console.log(JSON.stringify(results, null, 2));
   }
 
-  let hasHighSeverityIssue = false;
+  let maxSeverityNumeric = 0;
+  const severityMap: Record<string, number> = { low: 1, medium: 2, high: 3 };
+
   for (const progress of results) {
     if (progress.issues) {
       for (const issue of progress.issues) {
-        if (issue.severity && issue.severity.toLowerCase() === 'high') {
-          hasHighSeverityIssue = true;
+        if (issue.severity) {
+          const score = severityMap[issue.severity.toLowerCase()] || 0;
+          if (score > maxSeverityNumeric) {
+            maxSeverityNumeric = score;
+          }
         }
       }
     }
   }
 
-  if (hasHighSeverityIssue) {
-    console.log(colors.red("\n❌ Execution blocked: One or more HIGH severity issues were found by the judges. Please fix them."));
-    process.exit(1);
+  if (config.failOn) {
+    const threshold = severityMap[config.failOn] || 0;
+    if (threshold > 0 && maxSeverityNumeric >= threshold) {
+      console.log(colors.red(`\n❌ Execution blocked: Issues of severity '${config.failOn}' or higher were found.`));
+      process.exit(1);
+    }
   }
 }
 

@@ -38,4 +38,17 @@ describe('CLI Configuration Parsing', () => {
     const args = parseArgs(['--short', '--full']);
     expect(args.visibleIssueLimit).toBe(0);
   });
+
+  it('should parse the --fail-on flag', () => {
+    let args = parseArgs(['--fail-on', 'high']);
+    expect(args.failOn).toBe('high');
+
+    args = parseArgs(['--fail-on', 'MED']);
+    expect(args.failOn).toBe('medium');
+  });
+
+  it('should parse the --last-commit flag', () => {
+    const args = parseArgs(['--last-commit']);
+    expect(args.lastCommit).toBe(true);
+  });
 });
