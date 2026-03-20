@@ -1,4 +1,4 @@
 npm run test
 
-# Run judge on staged files using the fast --short mode
-npx tsx src/index.ts --staged --short
+# Run judge on staged files
+npx tsx src/index.ts --staged
