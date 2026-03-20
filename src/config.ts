@@ -13,17 +13,19 @@ export interface AppConfig {
   full: boolean;
   top?: string;
   help: boolean;
+  version: boolean;
   visibleIssueLimit: number;
 }
 
 export function parseArgs(argv: string[]): AppConfig {
   const parsed = mri(argv, {
     string: ['file', 'top'],
-    boolean: ['json', 'help', 'short', 'full', 'staged', 'diff'],
+    boolean: ['json', 'help', 'version', 'short', 'full', 'staged', 'diff'],
     alias: {
       f: 'file',
       j: 'json',
       h: 'help',
+      v: 'version',
       s: 'short',
       t: 'top'
     }
@@ -58,6 +60,7 @@ export function parseArgs(argv: string[]): AppConfig {
     full: !!parsed.full,
     top: parsed.top,
     help: !!parsed.help,
+    version: !!parsed.version,
     visibleIssueLimit,
   };
 }

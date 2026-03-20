@@ -7,6 +7,10 @@ import { ProgressRenderer, JudgeProgress } from './ui.js';
 import { runJudgesParallel } from './runner.js';
 import { formatIssuesList } from './format.js';
 import colors from 'picocolors';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json');
 
 function printHelp(): void {
   console.log(`
@@ -19,6 +23,7 @@ Options:
   --full       Show all issues found by judges
   --top <X>    Show the top X issues per judge (Default: 3)
   --help, -h   Show this help message
+  --version, -v Show the version number
   `);
 }
 
@@ -80,6 +85,11 @@ function printHumanReadableResults(progressList: JudgeProgress[], config: AppCon
 async function main() {
   const argsArray = process.argv.slice(2);
   const config = parseArgs(argsArray);
+
+  if (config.version) {
+    console.log(`judge-cli v${pkg.version}`);
+    return;
+  }
 
   if (config.help) {
     printHelp();

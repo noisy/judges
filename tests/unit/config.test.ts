@@ -14,10 +14,11 @@ describe('CLI Configuration Parsing', () => {
   });
 
   it('should parse explicit boolean flags', () => {
-    const args = parseArgs(['--json', '--staged', '--short']);
+    const args = parseArgs(['--json', '--staged', '--short', '--version']);
     expect(args.json).toBe(true);
     expect(args.staged).toBe(true);
     expect(args.short).toBe(true);
+    expect(args.version).toBe(true);
     expect(args.visibleIssueLimit).toBe(0); // --short overrides limit to 0
   });
 
