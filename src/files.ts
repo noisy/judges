@@ -65,8 +65,16 @@ export function readContents(filepaths: string[]): string {
   let result = '';
   for (const fullPath of filepaths) {
     try {
-      const content = fs.readFileSync(fullPath, 'utf-8');
       const displayPath = path.relative(process.cwd(), fullPath);
+      const buffer = fs.readFileSync(fullPath);
+      
+      // Heuristic: If it contains a null byte, it is likely a binary file.
+      if (buffer.includes(0)) {
+        console.warn(`[WARNING] Skipping likely binary file (contains null bytes): ${displayPath}`);
+        continue;
+      }
+      
+      const content = buffer.toString('utf-8');
       result += `\n--- File: ${displayPath} ---\n${content}\n`;
     } catch (error: any) {
       console.warn(`[WARNING] Error reading ${fullPath}:`, error.message);

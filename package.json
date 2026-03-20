@@ -1,8 +1,11 @@
 {
-  "name": "judges",
-  "version": "1.0.0",
-  "description": "",
+  "name": "judge-cli",
+  "version": "0.1.0",
+  "description": "AI-Powered Code Quality Assistant utilizing parallel specialized expert judges.",
   "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
   "bin": {
     "judge": "./dist/index.js"
   },

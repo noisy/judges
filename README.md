@@ -11,24 +11,17 @@
 
 ---
 
-## Installation & Setup
+## Installation
 
-Since this is a Node.js project, you should first install dependencies:
-
-```bash
-npm install
-npm run build
-```
-
-### Setting up a Local Alias
-To make it easy to run `judge` anywhere without typing the full path to `node`, you can create a local alias in your shell (`~/.bashrc` or `~/.zshrc`):
+Install globally via NPM:
 
 ```bash
-alias judge="node $(pwd)/dist/index.js"
+npm install -g judge-cli
 ```
-After adding this, restart your terminal or run `source ~/.zshrc`. You can now run `judge` in any directory!
 
-*(Alternatively, you can link the package globally using `npm link` if you've configured the `bin` field in `package.json`.)*
+Once installed globally, the `judge` command is available everywhere.
+
+*(Alternatively, to install locally per-project, run `npm install --save-dev judge-cli` and map it via `npx judge` or NPX scripts).*
 
 ---
 

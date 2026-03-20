@@ -55,8 +55,10 @@ export async function executeLLM(prompt: string): Promise<Issue[]> {
   }
 
   return new Promise((resolve, reject) => {
+    // Sanitize the prompt to absolutely guarantee no null bytes reach spawn().
+    const safePrompt = prompt.replace(/\0/g, '');
 
-    const child = spawn('claude', ['-p', prompt], { 
+    const child = spawn('claude', ['-p', safePrompt], { 
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
