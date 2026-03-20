@@ -55,20 +55,9 @@ judge -f src/index.ts src/utils.ts
 
 Judges are simply Markdown files named `JUDGE.md` located in `~/.judge/judges/<judge-name>/` (global) or `./.judge/judges/<judge-name>/` (project local).
 
-They follow a structure heavily inspired by AI Skills. The frontmatter defines metadata, and the body provides instructions.
+They follow a structure heavily inspired by AI Skills, utilizing YAML Frontmatter for configuration and Markdown for the system prompt.
 
-**Example `srp/JUDGE.md`:**
-```markdown
----
-name: SRP Validator
-description: Spots variables or functions combining multiple, unrelated responsibilities.
----
-
-Evaluate the code for Single Responsibility Principle (SRP) violations.
-- Functions should do one thing.
-- Classes should have only one reason to change.
-- Look for "God modules" or functions with `and` in their names.
-```
+👉 **[Read the full guide on Creating Custom Judges and Supported Frontmatter Options](./CREATING_JUDGES.md)**
 
 The system will automatically discover any `JUDGE.md` files in those directories and run them in parallel.
 
