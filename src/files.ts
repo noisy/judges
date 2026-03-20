@@ -3,7 +3,10 @@ import * as path from 'path';
 
 export const MAX_FILES = 100;
 export const MAX_BYTES = 1024 * 1024; // 1 MB
-const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', '.judge']);
+const IGNORED_DIRS = new Set([
+  'node_modules', '.git', 'dist', '.judge', 
+  '__pycache__', '.venv', 'venv', 'env', 'coverage'
+]);
 
 export function resolvePaths(filepaths: string | string[]): string[] {
   const initialPaths = Array.isArray(filepaths) ? filepaths : [filepaths];
