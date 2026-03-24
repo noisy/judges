@@ -49,7 +49,7 @@ export function parseLLMOutput(rawOutput: string): Issue[] {
   }
 }
 
-export async function executeLLM(prompt: string, engine: SupportedEngine = 'claude'): Promise<Issue[]> {
+export async function executeLLM(prompt: string, engine: SupportedEngine = 'claude', timeoutMs: number = 60000): Promise<Issue[]> {
   if (!checkLLMAvailability(engine)) {
     return mockLLMResponse(engine);
   }
@@ -73,6 +73,11 @@ export async function executeLLM(prompt: string, engine: SupportedEngine = 'clau
     let stdoutData = '';
     let stderrData = '';
 
+    const timeoutRef = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error(`API Error: ${engine} CLI timed out after ${timeoutMs / 1000} seconds.`));
+    }, timeoutMs);
+
     child.stdout.on('data', (data) => {
       stdoutData += data.toString();
     });
@@ -82,11 +87,13 @@ export async function executeLLM(prompt: string, engine: SupportedEngine = 'clau
     });
 
     child.on('error', (err) => {
+      clearTimeout(timeoutRef);
       reject(new Error(`Failed to spawn ${engine}: ${err.message}`));
     });
 
     child.on('close', (code) => {
-      if (code !== 0) {
+      clearTimeout(timeoutRef);
+      if (code !== 0 && code !== null) {
         let errorDetails = stderrData.trim() || stdoutData.trim();
         
         if (errorDetails.includes("You've hit your usage limit") || errorDetails.toLowerCase().includes("rate limit")) {
