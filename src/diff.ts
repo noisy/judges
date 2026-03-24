@@ -8,42 +8,23 @@ const MAX_DIFF_LINES_WARNING_THRESHOLD = 500;
 
 export function extractDiff(mode: 'staged' | 'diff' | 'head' | 'last-commit' = 'head'): EvaluationContext {
   try {
-    let command = 'git diff HEAD';
-    if (mode === 'staged') {
-      command = 'git diff --cached';
-    } else if (mode === 'diff') {
-      command = 'git diff';
-    } else if (mode === 'last-commit') {
-      command = 'git diff HEAD~1 HEAD';
-    }
-
-    let diff = '';
-    try {
-      diff = execSync(command, { encoding: 'utf-8' });
-    } catch (cmdError: any) {
-      if (mode === 'last-commit' && cmdError.message.includes('fatal: ')) {
-        // Fallback for initial commit where HEAD~1 doesn't exist
-        diff = execSync('git show HEAD --format=""', { encoding: 'utf-8' });
-      } else {
-        throw cmdError;
-      }
-    }
+    const command = buildDiffCommand(mode);
+    const diff = runDiffCommand(command, mode);
+    
     if (!diff.trim()) {
       throw new Error(`No git diff found (${command}). Make sure you have uncommitted changes or use path mode (e.g., 'judge .').`);
     }
 
     const files = parseModifiedFiles(command, mode);
-    const linesChanged = diff.split('\n').length;
+    const stats = buildDiffStats(diff, files);
     
-    if (files.length > MAX_DIFF_FILES_WARNING_THRESHOLD || linesChanged > MAX_DIFF_LINES_WARNING_THRESHOLD) {
-      console.warn(`\n[WARNING] Large commit detected: ${files.length} files changed, ~${linesChanged} lines in diff. Consider splitting large commits.\n`);
-    }
+    warnIfDiffIsLarge(stats);
 
     return {
       type: 'diff',
       rawDiff: diff,
       files,
-      stats: { filesChanged: files.length, linesChanged }
+      stats
     };
   } catch (error: any) {
     if (error.message.includes('fatal: ')) {
@@ -53,42 +34,92 @@ export function extractDiff(mode: 'staged' | 'diff' | 'head' | 'last-commit' = '
   }
 }
 
-function parseModifiedFiles(command: string, mode: 'staged' | 'diff' | 'head' | 'last-commit'): { path: string, content: string }[] {
-  const nameStatusCmd = command.replace('git diff', 'git diff --name-status');
-  let gitStatusOutput = '';
-  try {
-    gitStatusOutput = execSync(nameStatusCmd, { encoding: 'utf-8' });
-  } catch (err) {
-    return [];
-  }
+function buildDiffCommand(mode: 'staged' | 'diff' | 'head' | 'last-commit'): string {
+  if (mode === 'staged') return 'git diff --cached';
+  if (mode === 'diff') return 'git diff';
+  if (mode === 'last-commit') return 'git diff HEAD~1 HEAD';
+  return 'git diff HEAD';
+}
 
+function runDiffCommand(command: string, mode: 'staged' | 'diff' | 'head' | 'last-commit'): string {
+  try {
+    return execSync(command, { encoding: 'utf-8' });
+  } catch (cmdError: any) {
+    return handleLastCommitFallback(cmdError, mode);
+  }
+}
+
+function handleLastCommitFallback(error: any, mode: 'staged' | 'diff' | 'head' | 'last-commit'): string {
+  if (mode === 'last-commit' && error.message.includes('fatal: ')) {
+    return execSync('git show HEAD --format=""', { encoding: 'utf-8' });
+  }
+  throw error;
+}
+
+function buildDiffStats(diff: string, files: any[]): { filesChanged: number, linesChanged: number } {
+  return {
+    filesChanged: files.length,
+    linesChanged: diff.split('\n').length
+  };
+}
+
+function warnIfDiffIsLarge(stats: { filesChanged: number, linesChanged: number }): void {
+  if (stats.filesChanged > MAX_DIFF_FILES_WARNING_THRESHOLD || stats.linesChanged > MAX_DIFF_LINES_WARNING_THRESHOLD) {
+    console.warn(`\n[WARNING] Large commit detected: ${stats.filesChanged} files changed, ~${stats.linesChanged} lines in diff. Consider splitting large commits.\n`);
+  }
+}
+
+function parseModifiedFiles(command: string, mode: 'staged' | 'diff' | 'head' | 'last-commit'): { path: string, content: string }[] {
+  const gitStatusOutput = getModifiedFileEntries(command);
   const files: { path: string, content: string }[] = [];
+  
   if (!gitStatusOutput) return files;
   
   const lines = gitStatusOutput.split('\n').filter(l => l.trim());
   for (const line of lines) {
-    const parts = line.split('\t');
-    const status = parts[0][0]; 
-    if (status === 'D') continue; 
-    
-    const filePath = parts[parts.length - 1]; 
+    const parsed = parseNameStatusLine(line);
+    if (!parsed) continue;
 
-    try {
-      let content = '';
-      if (mode === 'staged' || mode === 'last-commit') {
-        content = readFromGitTree(filePath, mode);
-      } else {
-        const fullPath = path.resolve(process.cwd(), filePath);
-        if (fs.existsSync(fullPath)) {
-            content = fs.readFileSync(fullPath, 'utf-8');
-        }
-      }
-      files.push({ path: filePath, content });
-    } catch (fileErr: any) {
-      console.warn(`[WARNING] Failed to load full file context for ${filePath}: ${fileErr.message}`);
+    const content = loadFileContent(parsed.filePath, mode);
+    if (content !== null) {
+      files.push({ path: parsed.filePath, content });
     }
   }
   return files;
+}
+
+function getModifiedFileEntries(command: string): string {
+  const nameStatusCmd = command.replace('git diff', 'git diff --name-status');
+  try {
+    return execSync(nameStatusCmd, { encoding: 'utf-8' });
+  } catch (err) {
+    return '';
+  }
+}
+
+function parseNameStatusLine(line: string): { status: string, filePath: string } | null {
+  const parts = line.split('\t');
+  const status = parts[0][0]; 
+  if (status === 'D') return null; 
+  
+  const filePath = parts[parts.length - 1];
+  return { status, filePath };
+}
+
+function loadFileContent(filePath: string, mode: 'staged' | 'diff' | 'head' | 'last-commit'): string | null {
+  try {
+    if (mode === 'staged' || mode === 'last-commit') {
+      return readFromGitTree(filePath, mode);
+    } else {
+      const fullPath = path.resolve(process.cwd(), filePath);
+      if (fs.existsSync(fullPath)) {
+          return fs.readFileSync(fullPath, 'utf-8');
+      }
+    }
+  } catch (fileErr: any) {
+    console.warn(`[WARNING] Failed to load full file context for ${filePath}: ${fileErr.message}`);
+  }
+  return null;
 }
 
 function readFromGitTree(filePath: string, mode: 'staged' | 'last-commit'): string {
