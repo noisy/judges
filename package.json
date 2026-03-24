@@ -1,6 +1,6 @@
 {
   "name": "judge-cli",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "AI-Powered Code Quality Assistant utilizing parallel specialized expert judges.",
   "main": "dist/index.js",
   "files": [
