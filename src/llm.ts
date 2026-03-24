@@ -12,43 +12,6 @@ export interface Issue {
 export const MOCK_DELAY_BASE_MS = 1000;
 export const MOCK_DELAY_RANGE_MS = 2000;
 
-export function checkLLMAvailability(engine: SupportedEngine = 'claude'): boolean {
-  const check = spawnSync('which', [engine], { encoding: 'utf-8' });
-  return check.status === 0;
-}
-
-export async function mockLLMResponse(engine: SupportedEngine = 'claude'): Promise<Issue[]> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve([
-        {
-          file: "dummy.ts",
-          line: 10,
-          severity: "low",
-          message: `MOCK: This is a placeholder because the ${engine} CLI is not available.`
-        }
-      ]);
-    }, MOCK_DELAY_BASE_MS + Math.random() * MOCK_DELAY_RANGE_MS);
-  });
-}
-
-export function parseLLMOutput(rawOutput: string): Issue[] {
-  let jsonStr = rawOutput;
-  const jsonMatch = rawOutput.match(/\[[\s\S]*\]/);
-  if (jsonMatch) {
-    jsonStr = jsonMatch[0];
-  }
-  try {
-    const parsed = JSON.parse(jsonStr);
-    if (Array.isArray(parsed)) {
-      return parsed as Issue[];
-    }
-    throw new Error("Parsed object is not an array.");
-  } catch (e: any) {
-    throw new Error(`Failed to parse LLM output. Raw: ${rawOutput}`);
-  }
-}
-
 export async function executeLLM(prompt: string, engine: SupportedEngine = 'claude', timeoutMs: number = 30000): Promise<Issue[]> {
   if (!checkLLMAvailability(engine)) {
     return mockLLMResponse(engine);
@@ -111,4 +74,41 @@ export async function executeLLM(prompt: string, engine: SupportedEngine = 'clau
       }
     });
   });
+}
+
+export function checkLLMAvailability(engine: SupportedEngine = 'claude'): boolean {
+  const check = spawnSync('which', [engine], { encoding: 'utf-8' });
+  return check.status === 0;
+}
+
+export async function mockLLMResponse(engine: SupportedEngine = 'claude'): Promise<Issue[]> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve([
+        {
+          file: "dummy.ts",
+          line: 10,
+          severity: "low",
+          message: `MOCK: This is a placeholder because the ${engine} CLI is not available.`
+        }
+      ]);
+    }, MOCK_DELAY_BASE_MS + Math.random() * MOCK_DELAY_RANGE_MS);
+  });
+}
+
+export function parseLLMOutput(rawOutput: string): Issue[] {
+  let jsonStr = rawOutput;
+  const jsonMatch = rawOutput.match(/\[[\s\S]*\]/);
+  if (jsonMatch) {
+    jsonStr = jsonMatch[0];
+  }
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (Array.isArray(parsed)) {
+      return parsed as Issue[];
+    }
+    throw new Error("Parsed object is not an array.");
+  } catch (e: any) {
+    throw new Error(`Failed to parse LLM output. Raw: ${rawOutput}`);
+  }
 }
