@@ -32,20 +32,19 @@ export async function mockLLMResponse(engine: 'claude' | 'codex' = 'claude'): Pr
 }
 
 export function parseLLMOutput(rawOutput: string): Issue[] {
+  let jsonStr = rawOutput;
+  const jsonMatch = rawOutput.match(/\[[\s\S]*\]/);
+  if (jsonMatch) {
+    jsonStr = jsonMatch[0];
+  }
   try {
-    let jsonStr = rawOutput;
-    const jsonMatch = rawOutput.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      jsonStr = jsonMatch[0];
-    }
     const parsed = JSON.parse(jsonStr);
     if (Array.isArray(parsed)) {
       return parsed as Issue[];
     }
-    return [];
-  } catch (e) {
-    console.error("Failed to parse LLM output as JSON. Raw output was:", rawOutput);
-    return [];
+    throw new Error("Parsed object is not an array.");
+  } catch (e: any) {
+    throw new Error(`Failed to parse LLM output. Raw: ${rawOutput}`);
   }
 }
 
@@ -81,11 +80,16 @@ export async function executeLLM(prompt: string, engine: 'claude' | 'codex' = 'c
 
     child.on('close', (code) => {
       if (code !== 0) {
-        return reject(new Error(`${engine} CLI exited with status ${code}: ${stderrData}`));
+        const errorDetails = stderrData.trim() || stdoutData.trim();
+        return reject(new Error(`${engine} CLI exited with status ${code}: ${errorDetails}`));
       }
 
       const rawOutput = stdoutData.trim();
-      resolve(parseLLMOutput(rawOutput));
+      try {
+        resolve(parseLLMOutput(rawOutput));
+      } catch (err: any) {
+        reject(err);
+      }
     });
   });
 }
