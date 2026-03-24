@@ -1,3 +1,4 @@
+import { SupportedEngine } from './types.js';
 import { spawn } from 'child_process';
 import { spawnSync } from 'child_process';
 
@@ -11,12 +12,12 @@ export interface Issue {
 export const MOCK_DELAY_BASE_MS = 1000;
 export const MOCK_DELAY_RANGE_MS = 2000;
 
-export function checkLLMAvailability(engine: 'claude' | 'codex' = 'claude'): boolean {
+export function checkLLMAvailability(engine: SupportedEngine = 'claude'): boolean {
   const check = spawnSync('which', [engine], { encoding: 'utf-8' });
   return check.status === 0;
 }
 
-export async function mockLLMResponse(engine: 'claude' | 'codex' = 'claude'): Promise<Issue[]> {
+export async function mockLLMResponse(engine: SupportedEngine = 'claude'): Promise<Issue[]> {
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve([
@@ -48,7 +49,7 @@ export function parseLLMOutput(rawOutput: string): Issue[] {
   }
 }
 
-export async function executeLLM(prompt: string, engine: 'claude' | 'codex' = 'claude'): Promise<Issue[]> {
+export async function executeLLM(prompt: string, engine: SupportedEngine = 'claude'): Promise<Issue[]> {
   if (!checkLLMAvailability(engine)) {
     return mockLLMResponse(engine);
   }
@@ -57,7 +58,13 @@ export async function executeLLM(prompt: string, engine: 'claude' | 'codex' = 'c
     // Sanitize the prompt to absolutely guarantee no null bytes reach spawn().
     const safePrompt = prompt.replace(/\0/g, '');
 
-    const args = engine === 'codex' ? ['exec', safePrompt] : ['-p', safePrompt];
+    const ENGINE_COMMANDS: Record<SupportedEngine, (p: string) => string[]> = {
+      claude: (p) => ['-p', p],
+      codex: (p) => ['exec', p],
+      gemini: (p) => ['-p', p]
+    };
+
+    const args = ENGINE_COMMANDS[engine] ? ENGINE_COMMANDS[engine](safePrompt) : ENGINE_COMMANDS['claude'](safePrompt);
 
     const child = spawn(engine, args, { 
       stdio: ['ignore', 'pipe', 'pipe']
