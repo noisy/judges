@@ -13,7 +13,8 @@ export async function runJudgesParallel(
     p.state = 'running';
     try {
       const prompt = constructPrompt(p.judge, inputContext);
-      const issues = await executeLLM(prompt, engine);
+      const timeoutMs = (p.judge.timeout_seconds || 30) * 1000;
+      const issues = await executeLLM(prompt, engine, timeoutMs);
       p.state = 'done';
       p.issues = issues;
       

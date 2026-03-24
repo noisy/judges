@@ -49,7 +49,7 @@ export function parseLLMOutput(rawOutput: string): Issue[] {
   }
 }
 
-export async function executeLLM(prompt: string, engine: SupportedEngine = 'claude', timeoutMs: number = 60000): Promise<Issue[]> {
+export async function executeLLM(prompt: string, engine: SupportedEngine = 'claude', timeoutMs: number = 30000): Promise<Issue[]> {
   if (!checkLLMAvailability(engine)) {
     return mockLLMResponse(engine);
   }
