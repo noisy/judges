@@ -80,7 +80,12 @@ export async function executeLLM(prompt: string, engine: 'claude' | 'codex' = 'c
 
     child.on('close', (code) => {
       if (code !== 0) {
-        const errorDetails = stderrData.trim() || stdoutData.trim();
+        let errorDetails = stderrData.trim() || stdoutData.trim();
+        
+        if (errorDetails.includes("You've hit your usage limit") || errorDetails.toLowerCase().includes("rate limit")) {
+          return reject(new Error(`API Error: Rate limit reached`));
+        }
+        
         return reject(new Error(`${engine} CLI exited with status ${code}: ${errorDetails}`));
       }
 
