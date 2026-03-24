@@ -1,9 +1,14 @@
-import { executeLLM, Issue } from './llm.js';
+import { executeLLM, Issue, parseLLMOutput } from './llm.js';
 import { constructPrompt } from './prompt.js';
 import { JudgeProgress } from './ui.js';
 import { SEVERITY_SCORE } from './config.js';
+import { EvaluationContext } from './types.js';
 
-export async function runJudgesParallel(progressList: JudgeProgress[], inputContext: string, engine: 'claude' | 'codex' = 'claude'): Promise<any[]> {
+export async function runJudgesParallel(
+  progressList: JudgeProgress[],
+  inputContext: EvaluationContext,
+  engine: 'claude' | 'codex'
+): Promise<any[]> {
   const promises = progressList.map(async (p) => {
     p.state = 'running';
     try {

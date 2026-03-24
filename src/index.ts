@@ -4,6 +4,7 @@ import { extractDiff } from './diff.js';
 import { resolvePaths, readContents } from './files.js';
 import { discoverJudges, Judge } from './judges.js';
 import { ProgressRenderer, JudgeProgress } from './ui.js';
+import { EvaluationContext } from './types.js';
 import { runJudgesParallel } from './runner.js';
 import { formatIssuesList } from './format.js';
 import colors from 'picocolors';
@@ -13,78 +14,6 @@ import path from 'path';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
-
-function printHelp(): void {
-  console.log(`
-Usage: judge [options]
-
-Options:
-  --file, -f   Evaluate a specific file or files instead of git diff
-  --json, -j   Output results in JSON format (for agents)
-  --short, -s  Only show the summarization line per judge (0 issues detailed)
-  --full       Show all issues found by judges
-  --top <X>    Show the top X issues per judge (Default: 3)
-  --help, -h   Show this help message
-  --version, -v Show the version number
-  `);
-}
-
-function resolveInputContext(config: AppConfig): string {
-  if (config.paths.length > 0) {
-    const paths = resolvePaths(config.paths);
-    return readContents(paths);
-  }
-  if (config.file) {
-    const paths = resolvePaths(config.file);
-    return readContents(paths);
-  }
-  
-  if (config.staged) {
-    return extractDiff('staged');
-  } else if (config.diff) {
-    return extractDiff('diff');
-  } else if (config.lastCommit) {
-    return extractDiff('last-commit');
-  }
-
-  return extractDiff('head');
-}
-
-async function orchestrateEvaluation(judges: Judge[], inputContext: string, config: AppConfig): Promise<any[]> {
-  const progressList: JudgeProgress[] = judges.map((judge) => ({ 
-    judge, 
-    state: 'pending', 
-    displayName: judge.name || judge.id 
-  }));
-
-  const renderer = new ProgressRenderer(progressList);
-  
-  if (!config.json) {
-    renderer.start();
-  }
-
-  const results = await runJudgesParallel(progressList, inputContext, config.engine);
-
-  if (!config.json) {
-    renderer.stop();
-    printHumanReadableResults(progressList, config);
-  }
-
-  return results;
-}
-
-function printHumanReadableResults(progressList: JudgeProgress[], config: AppConfig): void {
-  if (config.visibleIssueLimit > 0) {
-    console.log('\n--- Evaluation Details ---\n');
-    for (const progress of progressList) {
-      if (progress.issues && progress.issues.length > 0) {
-         const issuesToShow = progress.issues.slice(0, config.visibleIssueLimit);
-         console.log(formatIssuesList(progress.displayName, issuesToShow, progress.issues.length));
-      }
-    }
-  }
-  console.log(colors.bold("\n--- Done ---\n"));
-}
 
 async function main() {
   const argsArray = process.argv.slice(2);
@@ -149,7 +78,7 @@ async function main() {
     return;
   }
 
-  let inputContext = '';
+  let inputContext: EvaluationContext;
   try {
     inputContext = resolveInputContext(config);
   } catch (error: any) {
@@ -195,3 +124,76 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+function resolveInputContext(config: AppConfig): EvaluationContext {
+  if (config.paths.length > 0) {
+    const paths = resolvePaths(config.paths);
+    return readContents(paths);
+  }
+  if (config.file) {
+    const paths = resolvePaths(config.file);
+    return readContents(paths);
+  }
+  
+  if (config.staged) {
+    return extractDiff('staged');
+  } else if (config.diff) {
+    return extractDiff('diff');
+  } else if (config.lastCommit) {
+    return extractDiff('last-commit');
+  }
+
+  return extractDiff('head');
+}
+
+async function orchestrateEvaluation(judges: Judge[], inputContext: EvaluationContext, config: AppConfig): Promise<any[]> {
+  const progressList: JudgeProgress[] = judges.map((judge) => ({ 
+    judge, 
+    state: 'pending', 
+    displayName: judge.name || judge.id 
+  }));
+
+  const renderer = new ProgressRenderer(progressList);
+  
+  if (!config.json) {
+    renderer.start();
+  }
+
+  const results = await runJudgesParallel(progressList, inputContext, config.engine);
+
+  if (!config.json) {
+    renderer.stop();
+    printHumanReadableResults(progressList, config);
+  }
+
+  return results;
+}
+
+function printHumanReadableResults(progressList: JudgeProgress[], config: AppConfig): void {
+  if (config.visibleIssueLimit > 0) {
+    console.log('\n--- Evaluation Details ---\n');
+    for (const progress of progressList) {
+      if (progress.issues && progress.issues.length > 0) {
+         const issuesToShow = progress.issues.slice(0, config.visibleIssueLimit);
+         console.log(formatIssuesList(progress.displayName, issuesToShow, progress.issues.length));
+      }
+    }
+  }
+  console.log(colors.bold("\n--- Done ---\n"));
+}
+
+function printHelp(): void {
+  console.log(`
+Usage: judge [options]
+
+Options:
+  --file, -f   Evaluate a specific file or files instead of git diff
+  --json, -j   Output results in JSON format (for agents)
+  --short, -s  Only show the summarization line per judge (0 issues detailed)
+  --full       Show all issues found by judges
+  --top <X>    Show the top X issues per judge (Default: 3)
+  --help, -h   Show this help message
+  --version, -v Show the version number
+  `);
+}
+

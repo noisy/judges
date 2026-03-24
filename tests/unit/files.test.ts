@@ -28,8 +28,10 @@ describe('File Resolution and Traversal', () => {
     expect(paths).toEqual([expect.stringContaining('src/test.ts')]);
     
     const result = readContents(paths);
-    expect(result).toContain('--- File: src/test.ts ---');
-    expect(result).toContain('fake content');
+    expect(result.type).toBe('files');
+    expect(result.files).toHaveLength(1);
+    expect(result.files[0].path).toContain('src/test.ts');
+    expect(result.files[0].content).toBe('fake content');
   });
 
   it('should skip a file if it exceeds the size limit', () => {

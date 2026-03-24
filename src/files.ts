@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { EvaluationContext } from './types.js';
 
 export const MAX_FILES = 100;
 export const MAX_BYTES = 1024 * 1024; // 1 MB
@@ -13,6 +14,22 @@ export function resolvePaths(filepaths: string | string[]): string[] {
   const resolvedFiles: string[] = [];
   let totalFiles = 0;
   let totalBytes = 0;
+
+  function checkScanBudget(newFileSize: number): { action: 'allow' | 'stop' | 'skip', warningMsg?: string } {
+    if (totalFiles >= MAX_FILES) {
+      return { 
+        action: 'stop', 
+        warningMsg: `\n[WARNING] Too many files resolved. Limit is ${MAX_FILES}. Stopping scan.\n` 
+      };
+    }
+    if (totalBytes + newFileSize > MAX_BYTES) {
+      return { 
+        action: 'skip', 
+        warningMsg: `\n[WARNING] File size limit exceeded (${MAX_BYTES} bytes).\n` 
+      };
+    }
+    return { action: 'allow' };
+  }
 
   function traverse(currentPath: string) {
     if (totalFiles > MAX_FILES || totalBytes > MAX_BYTES) return;
@@ -32,21 +49,20 @@ export function resolvePaths(filepaths: string | string[]): string[] {
           traverse(path.join(fullPath, child));
         }
       } else if (stats.isFile()) {
-        if (totalFiles >= MAX_FILES) {
-          console.warn(`\n[WARNING] Too many files resolved. Limit is ${MAX_FILES}. Stopping scan.\n`);
-          totalFiles++;
-          return;
+        const budgetStatus = checkScanBudget(stats.size);
+        
+        if (budgetStatus.warningMsg) {
+          console.warn(budgetStatus.warningMsg);
         }
 
-        const size = stats.size;
-        if (totalBytes + size > MAX_BYTES) {
-          console.warn(`\n[WARNING] File size limit exceeded (${MAX_BYTES} bytes). Skipping ${currentPath}\n`);
+        if (budgetStatus.action === 'stop' || budgetStatus.action === 'skip') {
+          if (budgetStatus.action === 'stop') totalFiles++;
           return;
         }
 
         resolvedFiles.push(fullPath);
         totalFiles++;
-        totalBytes += size;
+        totalBytes += stats.size;
       }
     } catch (error: any) {
       console.warn(`[WARNING] Error scoping ${currentPath}:`, error.message);
@@ -64,24 +80,49 @@ export function resolvePaths(filepaths: string | string[]): string[] {
   return resolvedFiles;
 }
 
-export function readContents(filepaths: string[]): string {
-  let result = '';
+export function readContents(filepaths: string[]): EvaluationContext {
+  const files: { path: string, content: string }[] = [];
+  let linesChanged = 0;
+
   for (const fullPath of filepaths) {
-    try {
-      const displayPath = path.relative(process.cwd(), fullPath);
-      const buffer = fs.readFileSync(fullPath);
-      
-      // Heuristic: If it contains a null byte, it is likely a binary file.
-      if (buffer.includes(0)) {
-        console.warn(`[WARNING] Skipping likely binary file (contains null bytes): ${displayPath}`);
-        continue;
-      }
-      
-      const content = buffer.toString('utf-8');
-      result += `\n--- File: ${displayPath} ---\n${content}\n`;
-    } catch (error: any) {
-      console.warn(`[WARNING] Error reading ${fullPath}:`, error.message);
+    const displayPath = path.relative(process.cwd(), fullPath);
+    const readResult = readFileSafely(fullPath);
+    
+    if (readResult.skipBinary) {
+      console.warn(`[WARNING] Skipping likely binary file (contains null bytes): ${displayPath}`);
+      continue;
+    }
+    
+    if (readResult.error) {
+      console.warn(`[WARNING] Error reading ${fullPath}:`, readResult.error);
+      continue;
+    }
+    
+    if (readResult.content !== undefined) {
+      files.push({ path: displayPath, content: readResult.content });
+      linesChanged += countLines(readResult.content);
     }
   }
-  return result;
+  
+  return {
+    type: 'files',
+    files,
+    stats: { filesChanged: files.length, linesChanged }
+  };
+}
+
+function readFileSafely(fullPath: string): { content?: string, error?: string, skipBinary?: boolean } {
+  try {
+    const buffer = fs.readFileSync(fullPath);
+    if (buffer.includes(0)) {
+      return { skipBinary: true };
+    }
+    return { content: buffer.toString('utf-8') };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+}
+
+function countLines(text: string): number {
+  return text.split('\n').length;
 }
