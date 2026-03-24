@@ -53,11 +53,6 @@ export function extractDiff(mode: 'staged' | 'diff' | 'head' | 'last-commit' = '
   }
 }
 
-function readFromGitTree(filePath: string, mode: 'staged' | 'last-commit'): string {
-  const target = mode === 'staged' ? `:${filePath}` : `HEAD:${filePath}`;
-  return execSync(`git show ${target}`, { encoding: 'utf-8' });
-}
-
 function parseModifiedFiles(command: string, mode: 'staged' | 'diff' | 'head' | 'last-commit'): { path: string, content: string }[] {
   const nameStatusCmd = command.replace('git diff', 'git diff --name-status');
   let gitStatusOutput = '';
@@ -94,4 +89,9 @@ function parseModifiedFiles(command: string, mode: 'staged' | 'diff' | 'head' | 
     }
   }
   return files;
+}
+
+function readFromGitTree(filePath: string, mode: 'staged' | 'last-commit'): string {
+  const target = mode === 'staged' ? `:${filePath}` : `HEAD:${filePath}`;
+  return execSync(`git show ${target}`, { encoding: 'utf-8' });
 }
