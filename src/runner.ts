@@ -3,11 +3,11 @@ import { constructPrompt } from './prompt.js';
 import { JudgeProgress } from './ui.js';
 import { SEVERITY_SCORE } from './config.js';
 
-export async function runJudgesParallel(progressList: JudgeProgress[], inputContext: string): Promise<any[]> {
+export async function runJudgesParallel(progressList: JudgeProgress[], inputContext: string, engine: 'claude' | 'codex' = 'claude'): Promise<any[]> {
   const promises = progressList.map(async (p) => {
     p.state = 'running';
     const prompt = constructPrompt(p.judge, inputContext);
-    const issues = await executeLLM(prompt);
+    const issues = await executeLLM(prompt, engine);
     p.state = 'done';
     p.issues = issues;
     

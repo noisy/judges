@@ -61,7 +61,7 @@ async function orchestrateEvaluation(judges: Judge[], inputContext: string, conf
     renderer.start();
   }
 
-  const results = await runJudgesParallel(progressList, inputContext);
+  const results = await runJudgesParallel(progressList, inputContext, config.engine);
 
   if (!config.json) {
     renderer.stop();

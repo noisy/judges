@@ -17,11 +17,12 @@ export interface AppConfig {
   visibleIssueLimit: number;
   failOn?: string;
   lastCommit: boolean;
+  engine: 'claude' | 'codex';
 }
 
 export function parseArgs(argv: string[]): AppConfig {
   const parsed = mri(argv, {
-    string: ['file', 'top', 'fail-on'],
+    string: ['file', 'top', 'fail-on', 'engine'],
     boolean: ['json', 'help', 'version', 'short', 'full', 'staged', 'diff', 'last-commit'],
     alias: {
       f: 'file',
@@ -57,6 +58,8 @@ export function parseArgs(argv: string[]): AppConfig {
   let failOn = parsed['fail-on']?.toLowerCase();
   if (failOn === 'med') failOn = 'medium';
 
+  const engine = parsed.engine === 'codex' ? 'codex' : 'claude';
+
   return {
     file: parsed.file,
     paths,
@@ -71,5 +74,6 @@ export function parseArgs(argv: string[]): AppConfig {
     visibleIssueLimit,
     failOn,
     lastCommit: !!parsed['last-commit'],
+    engine,
   };
 }

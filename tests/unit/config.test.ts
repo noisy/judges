@@ -10,6 +10,7 @@ describe('CLI Configuration Parsing', () => {
     expect(args.staged).toBe(false);
     expect(args.diff).toBe(false);
     expect(args.help).toBe(false);
+    expect(args.engine).toBe('claude'); // Default engine
     expect(args.visibleIssueLimit).toBe(3); // DEFAULT_MAX_ISSUES_TO_SHOW
   });
 
@@ -50,5 +51,13 @@ describe('CLI Configuration Parsing', () => {
   it('should parse the --last-commit flag', () => {
     const args = parseArgs(['--last-commit']);
     expect(args.lastCommit).toBe(true);
+  });
+
+  it('should parse the --engine flag', () => {
+    let args = parseArgs(['--engine', 'codex']);
+    expect(args.engine).toBe('codex');
+
+    args = parseArgs(['--engine', 'unknown']);
+    expect(args.engine).toBe('claude'); // Fallback to default
   });
 });

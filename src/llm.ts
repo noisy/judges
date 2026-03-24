@@ -11,12 +11,12 @@ export interface Issue {
 export const MOCK_DELAY_BASE_MS = 1000;
 export const MOCK_DELAY_RANGE_MS = 2000;
 
-export function checkLLMAvailability(): boolean {
-  const check = spawnSync('which', ['claude'], { encoding: 'utf-8' });
+export function checkLLMAvailability(engine: 'claude' | 'codex' = 'claude'): boolean {
+  const check = spawnSync('which', [engine], { encoding: 'utf-8' });
   return check.status === 0;
 }
 
-export async function mockLLMResponse(): Promise<Issue[]> {
+export async function mockLLMResponse(engine: 'claude' | 'codex' = 'claude'): Promise<Issue[]> {
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve([
@@ -24,7 +24,7 @@ export async function mockLLMResponse(): Promise<Issue[]> {
           file: "dummy.ts",
           line: 10,
           severity: "low",
-          message: "MOCK: This is a placeholder because the claude CLI is not available."
+          message: `MOCK: This is a placeholder because the ${engine} CLI is not available.`
         }
       ]);
     }, MOCK_DELAY_BASE_MS + Math.random() * MOCK_DELAY_RANGE_MS);
@@ -49,16 +49,18 @@ export function parseLLMOutput(rawOutput: string): Issue[] {
   }
 }
 
-export async function executeLLM(prompt: string): Promise<Issue[]> {
-  if (!checkLLMAvailability()) {
-    return mockLLMResponse();
+export async function executeLLM(prompt: string, engine: 'claude' | 'codex' = 'claude'): Promise<Issue[]> {
+  if (!checkLLMAvailability(engine)) {
+    return mockLLMResponse(engine);
   }
 
   return new Promise((resolve, reject) => {
     // Sanitize the prompt to absolutely guarantee no null bytes reach spawn().
     const safePrompt = prompt.replace(/\0/g, '');
 
-    const child = spawn('claude', ['-p', safePrompt], { 
+    const args = engine === 'codex' ? ['exec', safePrompt] : ['-p', safePrompt];
+
+    const child = spawn(engine, args, { 
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -74,12 +76,12 @@ export async function executeLLM(prompt: string): Promise<Issue[]> {
     });
 
     child.on('error', (err) => {
-      reject(new Error(`Failed to spawn claude: ${err.message}`));
+      reject(new Error(`Failed to spawn ${engine}: ${err.message}`));
     });
 
     child.on('close', (code) => {
       if (code !== 0) {
-        return reject(new Error(`Claude CLI exited with status ${code}: ${stderrData}`));
+        return reject(new Error(`${engine} CLI exited with status ${code}: ${stderrData}`));
       }
 
       const rawOutput = stdoutData.trim();

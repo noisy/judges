@@ -46,6 +46,7 @@ judge -f src/index.ts src/utils.ts
 - `--short`, `-s`: Only show the summarization line per judge (0 issues detailed).
 - `--full`: Show all issues found by judges.
 - `--top <X>`: Show the top X issues per judge (Default: 3).
+- `--engine <name>`: Choose the AI engine to execute. Supported: `claude` (default) and `codex`.
 - `--json`, `-j`: Output results in exact JSON format (for agents).
 - `--help`, `-h`: Show the help message.
 
