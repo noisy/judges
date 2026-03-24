@@ -1,4 +1,5 @@
 ---
+version: 1.0.0
 name: DRY Principle
 description: Finds duplicated logic and violations of the Don't Repeat Yourself principle.
 ---

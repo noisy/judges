@@ -9,6 +9,8 @@ import { formatIssuesList } from './format.js';
 import colors from 'picocolors';
 import { createRequire } from 'module';
 
+import path from 'path';
+
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
 
@@ -98,6 +100,55 @@ async function main() {
     return;
   }
 
+  const judges = discoverJudges();
+
+  if (config.command === 'config') {
+    if (config.configAction === 'check') {
+      const judgesToCheck = config.configTarget 
+          ? judges.filter(j => j.id === config.configTarget) 
+          : judges;
+
+      if (judgesToCheck.length === 0 && config.configTarget) {
+        console.error(colors.red(`❌ Judge '${config.configTarget}' not found.`));
+        process.exit(1);
+      }
+
+      let hasErrors = false;
+    for (const j of judgesToCheck) {
+      if (j.isValid) {
+        console.log(colors.green(`✔ ${j.id} JUDGE.md is valid (v${j.version} · ${j.mode} · ${j.timeout_seconds}s)`));
+      } else {
+        hasErrors = true;
+        console.log(colors.red(`✘ ${j.id} JUDGE.md is invalid`));
+        for (const err of j.validationErrors) {
+           console.log(colors.red(`  └─ ${err}`));
+        }
+      }
+    }
+      process.exit(hasErrors ? 1 : 0);
+      return;
+    }
+    
+    // User cancelled the other flags like --list, so safely exit here for now.
+    return;
+  }
+
+  const validJudges = judges.filter(j => {
+    if (!j.isValid) {
+      if (!config.json) {
+        const dir = path.dirname(j.filePath);
+        console.warn(colors.yellow(`⚠ skipping ${dir} — invalid JUDGE.md:\n  └─ ${j.validationErrors.join('\n  └─ ')}`));
+      }
+      return false;
+    }
+    return true;
+  });
+
+  if (validJudges.length === 0) {
+    console.log("No valid judges found in ~/.judge/judges/ or ./.judge/judges/");
+    return;
+  }
+
   let inputContext = '';
   try {
     inputContext = resolveInputContext(config);
@@ -109,14 +160,7 @@ async function main() {
     return;
   }
   
-  const judges = discoverJudges();
-  
-  if (judges.length === 0) {
-    console.log("No judges found in ~/.judge/judges/ or ./.judge/judges/");
-    return;
-  }
-
-  const results = await orchestrateEvaluation(judges, inputContext, config);
+  const results = await orchestrateEvaluation(validJudges, inputContext, config);
 
   if (config.json) {
     console.log(JSON.stringify(results, null, 2));

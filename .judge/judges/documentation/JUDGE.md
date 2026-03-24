@@ -1,4 +1,5 @@
 ---
+version: 1.0.0
 name: Documentation Reviewer
 description: Detects when code changes contradict existing documentation or comments, making them obsolete or misleading. Does not demand new documentation.
 ---

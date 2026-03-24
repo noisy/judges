@@ -1,4 +1,5 @@
 ---
+version: 1.0.0
 name: Side Effects
 description: Detects hidden mutations and unexpected side effects.
 ---

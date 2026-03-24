@@ -2,13 +2,20 @@ import * as fs from 'fs';
 import * as path from 'path';
 import os from 'os';
 import matter from 'gray-matter';
+import { validateJudge } from './validator.js';
 
 export interface Judge {
   id: string; // Directory name
-  name?: string;
-  description?: string;
-  instructions: string; // The markdown body
+  name: string;
+  description: string;
+  version: string;
+  mode: 'one-shot' | 'agent';
+  timeout_seconds: number;
+  instructions: string;
   filePath: string;
+  isValid: boolean;
+  validationErrors: string[];
+  validationWarnings: string[];
 }
 
 function findJudgesInDir(baseDir: string): Judge[] {
@@ -30,12 +37,20 @@ function findJudgesInDir(baseDir: string): Judge[] {
           const content = fs.readFileSync(judgeMdPath, 'utf-8');
           const parsed = matter(content);
           
+          const validation = validateJudge(parsed.data);
+
           judges.push({
             id: entry.name,
-            name: parsed.data.name,
-            description: parsed.data.description,
+            name: validation.data?.name || parsed.data.name || entry.name,
+            description: validation.data?.description || parsed.data.description || '',
+            version: validation.data?.version || '',
+            mode: validation.data?.mode || 'one-shot',
+            timeout_seconds: validation.data?.timeout_seconds || 30,
             instructions: parsed.content.trim(),
             filePath: judgeMdPath,
+            isValid: validation.valid,
+            validationErrors: validation.errors,
+            validationWarnings: validation.warnings,
           });
         } catch (error: any) {
           console.error(`Error parsing ${judgeMdPath}:`, error.message);
@@ -64,5 +79,10 @@ export function discoverJudges(): Judge[] {
     judgeMap.set(lj.id, lj);
   }
 
-  return Array.from(judgeMap.values());
+  const allJudges = Array.from(judgeMap.values());
+  const validJudges: Judge[] = [];
+
+  // Filter out invalid judges if we're not explicitly in checking mode.
+  // Actually, standard runs should just skip them and warn. The index.ts will decide what to print, but here we can just warn for invalid ones.
+  return allJudges;
 }

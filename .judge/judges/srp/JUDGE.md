@@ -1,4 +1,5 @@
 ---
+version: 1.0.0
 name: SRP Validator
 description: Validates the Single Responsibility Principle for functions and classes.
 ---

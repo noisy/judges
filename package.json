@@ -39,7 +39,8 @@
     "gray-matter": "^4.0.3",
     "log-update": "^7.2.0",
     "mri": "^1.2.0",
-    "picocolors": "^1.1.1"
+    "picocolors": "^1.1.1",
+    "zod": "^4.3.6"
   },
   "type": "module"
 }

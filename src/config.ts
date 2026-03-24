@@ -18,12 +18,15 @@ export interface AppConfig {
   failOn?: string;
   lastCommit: boolean;
   engine: 'claude' | 'codex';
+  command?: 'config';
+  configAction?: 'check' | 'list' | 'show' | 'which';
+  configTarget?: string;
 }
 
 export function parseArgs(argv: string[]): AppConfig {
   const parsed = mri(argv, {
-    string: ['file', 'top', 'fail-on', 'engine'],
-    boolean: ['json', 'help', 'version', 'short', 'full', 'staged', 'diff', 'last-commit'],
+    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which'],
+    boolean: ['json', 'help', 'version', 'short', 'full', 'staged', 'diff', 'last-commit', 'check', 'list'],
     alias: {
       f: 'file',
       j: 'json',
@@ -44,9 +47,30 @@ export function parseArgs(argv: string[]): AppConfig {
     if (isNaN(visibleIssueLimit)) visibleIssueLimit = DEFAULT_MAX_ISSUES_TO_SHOW;
   }
 
+  let command: 'config' | undefined;
+  let configAction: 'check' | 'list' | 'show' | 'which' | undefined;
+  let configTarget: string | undefined;
+
   const paths = parsed._ || [];
 
-  if (paths.length > 0 && (parsed.staged || parsed.diff || parsed['last-commit'])) {
+  if (paths[0] === 'config') {
+    command = 'config';
+    paths.shift(); // remove 'config'
+    if (parsed.check) {
+      configAction = 'check';
+      configTarget = paths.length > 0 ? paths[0] : undefined;
+    } else if (parsed.list) {
+      configAction = 'list';
+    } else if (parsed.show) {
+      configAction = 'show';
+      configTarget = parsed.show;
+    } else if (parsed.which) {
+      configAction = 'which';
+      configTarget = parsed.which;
+    }
+  }
+
+  if (command !== 'config' && paths.length > 0 && (parsed.staged || parsed.diff || parsed['last-commit'])) {
     console.warn("Warning: Positional paths and git diff flags (--staged, --diff, --last-commit) were both provided. Falling back to paths.");
   }
   
@@ -75,5 +99,8 @@ export function parseArgs(argv: string[]): AppConfig {
     failOn,
     lastCommit: !!parsed['last-commit'],
     engine,
+    command,
+    configAction,
+    configTarget,
   };
 }

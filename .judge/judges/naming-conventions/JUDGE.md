@@ -1,4 +1,5 @@
 ---
+version: 1.0.0
 name: Naming Conventions
 description: Validates that variables and functions have descriptive, non-abbreviated names.
 ---

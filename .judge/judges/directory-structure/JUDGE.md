@@ -1,4 +1,5 @@
 ---
+version: 1.0.0
 name: Directory Structure
 description: Evaluates directory hierarchy, file placement, and naming conventions strictly according to Clean Architecture / Uncle Bob principles.
 ---
