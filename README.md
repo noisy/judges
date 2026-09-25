@@ -1,3 +1,5 @@
+![Judges](docs/brand/readme-banner.png)
+
 # Judge: The AI-Powered Code Quality Assistant
 
 **Judge** is a fast, pluggable CLI tool that uses Small/Large Language Models to review your code against specific, focused rules. Instead of a single monolithic "Clean Code" prompt, Judge uses multiple specialized AI agents in parallel (e.g., SRP Validator, DRY Principle, Documentation Reviewer) to evaluate your git diffs or specific files.
