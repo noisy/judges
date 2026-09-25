@@ -1,20 +1,17 @@
-import { SupportedEngine } from './types.js';
+import { Issue, SupportedEngine } from './types.js';
 import { spawn } from 'child_process';
 import { spawnSync } from 'child_process';
 
-export interface Issue {
-  file: string;
-  line: string | number;
-  severity: 'low' | 'medium' | 'high';
-  message: string;
+export class TimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TimeoutError';
+  }
 }
-
-export const MOCK_DELAY_BASE_MS = 1000;
-export const MOCK_DELAY_RANGE_MS = 2000;
 
 export async function executeLLM(prompt: string, engine: SupportedEngine = 'claude', timeoutMs: number = 30000): Promise<Issue[]> {
   if (!checkLLMAvailability(engine)) {
-    return mockLLMResponse(engine);
+    throw new Error(`${engine} CLI not found on PATH`);
   }
 
   return new Promise((resolve, reject) => {
@@ -38,7 +35,7 @@ export async function executeLLM(prompt: string, engine: SupportedEngine = 'clau
 
     const timeoutRef = setTimeout(() => {
       child.kill('SIGTERM');
-      reject(new Error(`API Error: ${engine} CLI timed out after ${timeoutMs / 1000} seconds.`));
+      reject(new TimeoutError(`${engine} CLI timed out after ${timeoutMs / 1000} seconds.`));
     }, timeoutMs);
 
     child.stdout.on('data', (data) => {
@@ -79,21 +76,6 @@ export async function executeLLM(prompt: string, engine: SupportedEngine = 'clau
 export function checkLLMAvailability(engine: SupportedEngine = 'claude'): boolean {
   const check = spawnSync('which', [engine], { encoding: 'utf-8' });
   return check.status === 0;
-}
-
-export async function mockLLMResponse(engine: SupportedEngine = 'claude'): Promise<Issue[]> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve([
-        {
-          file: "dummy.ts",
-          line: 10,
-          severity: "low",
-          message: `MOCK: This is a placeholder because the ${engine} CLI is not available.`
-        }
-      ]);
-    }, MOCK_DELAY_BASE_MS + Math.random() * MOCK_DELAY_RANGE_MS);
-  });
 }
 
 export function parseLLMOutput(rawOutput: string): Issue[] {

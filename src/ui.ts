@@ -1,7 +1,7 @@
 import logUpdate from 'log-update';
 import colors from 'picocolors';
 import { Judge } from './judges.js';
-import { Issue } from './llm.js';
+import { Issue, JudgeStatus } from './types.js';
 
 export type JudgeState = 'pending' | 'running' | 'done' | 'error';
 
@@ -10,6 +10,8 @@ export interface JudgeProgress {
   judge: Judge;
   state: JudgeState;
   issues?: Issue[];
+  status?: JudgeStatus;
+  error?: string;
 }
 
 export class ProgressRenderer {
@@ -44,6 +46,10 @@ export class ProgressRenderer {
         output += `  ${colors.gray('○')} ${p.displayName}\n`;
       } else if (p.state === 'running') {
         output += `  ${colors.yellow(this.frames[this.frameIdx])} ${colors.cyan(p.displayName)} evaluating...\n`;
+      } else if (p.state === 'done' && p.status === 'timeout') {
+         output += `  ${colors.yellow('⚠')} ${colors.bold(p.displayName)}: timed out after ${p.judge.timeout_seconds}s\n`;
+      } else if (p.state === 'done' && p.status === 'error') {
+         output += `  ${colors.yellow('⚠')} ${colors.bold(p.displayName)}: error — ${firstLine(p.error)}\n`;
       } else if (p.state === 'done') {
          const issueCount = p.issues?.length || 0;
          if (issueCount === 0) {
@@ -65,4 +71,8 @@ export class ProgressRenderer {
     }
     logUpdate(output);
   }
+}
+
+function firstLine(text: string = ''): string {
+  return text.split('\n')[0];
 }

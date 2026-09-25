@@ -1,5 +1,5 @@
 import pc from 'picocolors';
-import { Issue } from './llm.js';
+import { Issue } from './types.js';
 
 export function formatIssuesList(judgeName: string, issues: Issue[], totalIssues: number): string {
   if (issues.length === 0) return '';
@@ -37,4 +37,9 @@ export function formatIssuesList(judgeName: string, issues: Issue[], totalIssues
   }
 
   return output;
+}
+
+export function formatJudgeFailure(judgeName: string, error: string): string {
+  const indentedError = error.split('\n').map(l => `      ${l}`).join('\n');
+  return `${pc.bold(pc.yellow('⚠'))} ${pc.bold(judgeName)} did not run:\n\n${indentedError}\n`;
 }

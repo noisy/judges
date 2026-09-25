@@ -33,17 +33,14 @@ judge --file src/components/Button.tsx --json
 
 ## Parsing the Output
 
-When you run with `--json`, it outputs an array of evaluations, which look like:
+When you run with `--json`, it outputs one result per judge, which look like:
 ```json
 [
   {
-    "judge": {
-      "id": "srp",
-      "name": "SRP Validator",
-      "instructions": "..."
-    },
-    "state": "completed",
+    "judgeId": "srp",
     "displayName": "SRP Validator",
+    "file": "/path/to/.judge/judges/srp/JUDGE.md",
+    "status": "ok",
     "issues": [
       {
         "file": "src/components/Button.tsx",
@@ -51,10 +48,22 @@ When you run with `--json`, it outputs an array of evaluations, which look like:
         "severity": "medium",
         "message": "This component combines data fetching and presentation. Separate into a container."
       }
-    ]
+    ],
+    "durationMs": 8421
+  },
+  {
+    "judgeId": "architecture",
+    "displayName": "Architecture Reviewer",
+    "file": "/path/to/.judge/judges/architecture/JUDGE.md",
+    "status": "timeout",
+    "issues": [],
+    "durationMs": 30004,
+    "error": "claude CLI timed out after 30 seconds."
   }
 ]
 ```
+
+`status` is `ok`, `error` or `timeout`. Only `ok` results carry issues; for `error` and `timeout` the judge did not run, so read `error` and do not treat it as a code finding.
 
 ## Your Responsibility
 If you receive issues from the `judge` CLI, you MUST:
