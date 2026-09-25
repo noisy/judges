@@ -32,6 +32,11 @@ describe('examinedSummary', () => {
     expect(examinedSummary(examined)).toBe('read 2 files, 2 searches');
   });
 
+  it('counts sandbox denials apart from what the judge actually read', () => {
+    const withDenial = [...examined, { tool: 'Read', target: '/tmp/outside.txt', denied: true }];
+    expect(examinedSummary(withDenial)).toBe('read 2 files, 2 searches, 1 denied by the sandbox');
+  });
+
   it('is empty for a judge that examined nothing', () => {
     expect(examinedSummary([])).toBe('');
   });
