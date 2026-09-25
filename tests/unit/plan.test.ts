@@ -46,4 +46,18 @@ describe('buildPlan', () => {
 
     expect(plan.map((item) => item.judge.id)).toEqual(['a', 'b']);
   });
+
+  it('hands a judge the markers with a reason for its own id in its scoped files', () => {
+    const markedContext: EvaluationContext = {
+      type: 'files',
+      files: [
+        { path: 'src/a.ts', content: 'x\n// rule-ignore: rule -- external key\ny\n// rule-todo: rule\nz\n// rule-ignore: other -- elsewhere\nw' },
+        { path: 'docs/b.md', content: '<!-- rule-ignore: rule -- out of scope -->' }
+      ]
+    };
+
+    const [item] = buildPlan([judge({ scope: ['src/**'] })], markedContext);
+
+    expect('markers' in item && item.markers.map((m) => [m.file, m.reason])).toEqual([['src/a.ts', 'external key']]);
+  });
 });

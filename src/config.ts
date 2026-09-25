@@ -22,7 +22,7 @@ export interface AppConfig {
   engine: SupportedEngine;
   ruleDirs: string[];
   only: string[];
-  command?: 'config';
+  command?: 'config' | 'markers';
   configAction?: 'check' | 'list' | 'show' | 'which';
   configTarget?: string;
 }
@@ -51,13 +51,16 @@ export function parseArgs(argv: string[]): AppConfig {
     if (isNaN(visibleIssueLimit)) visibleIssueLimit = DEFAULT_MAX_ISSUES_TO_SHOW;
   }
 
-  let command: 'config' | undefined;
+  let command: 'config' | 'markers' | undefined;
   let configAction: 'check' | 'list' | 'show' | 'which' | undefined;
   let configTarget: string | undefined;
 
   const paths = parsed._ || [];
 
-  if (paths[0] === 'config') {
+  if (paths[0] === 'markers') {
+    command = 'markers';
+    paths.shift(); // remove 'markers'
+  } else if (paths[0] === 'config') {
     command = 'config';
     paths.shift(); // remove 'config'
     if (parsed.check) {
@@ -74,7 +77,7 @@ export function parseArgs(argv: string[]): AppConfig {
     }
   }
 
-  if (command !== 'config' && paths.length > 0 && (parsed.staged || parsed.diff || parsed['last-commit'])) {
+  if (command === undefined && paths.length > 0 && (parsed.staged || parsed.diff || parsed['last-commit'])) {
     console.warn("Warning: Positional paths and git diff flags (--staged, --diff, --last-commit) were both provided. Falling back to paths.");
   }
   

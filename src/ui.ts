@@ -10,6 +10,7 @@ interface JudgeProgress {
   judge: Judge;
   state: JudgeState;
   issues?: Issue[];
+  suppressed?: number;
   status?: JudgeStatus;
   error?: string;
   skipReason?: string;
@@ -35,6 +36,7 @@ export class ProgressRenderer {
     if (event.state === 'done') {
       p.status = event.result.status;
       p.issues = event.result.issues;
+      p.suppressed = event.result.suppressed;
       p.error = event.result.error;
       p.skipReason = event.result.skipReason;
     }
@@ -71,26 +73,32 @@ export class ProgressRenderer {
       } else if (p.state === 'done' && p.status === 'error') {
          output += `  ${colors.yellow('⚠')} ${colors.bold(p.displayName)}: error — ${firstLine(p.error)}\n`;
       } else if (p.state === 'done') {
-         const issueCount = p.issues?.length || 0;
-         if (issueCount === 0) {
-            output += `  ${colors.green('✔')} ${p.displayName}: 0 issues\n`;
-         } else {
-            const highs = p.issues!.filter(i => i.severity === 'high').length;
-            const meds = p.issues!.filter(i => i.severity === 'medium').length;
-            const lows = p.issues!.filter(i => i.severity === 'low').length;
-            const summaryParts = [
-               highs > 0 ? colors.red(`${highs} High`) : '',
-               meds > 0 ? colors.yellow(`${meds} Med`) : '',
-               lows > 0 ? colors.blue(`${lows} Low`) : ''
-            ].filter(Boolean);
-            const summary = summaryParts.join(', ');
-            
-            output += `  ${colors.red('✘')} ${colors.bold(p.displayName)}: ${issueCount} issues (${summary})\n`;
-         }
+         output += `${issueSummaryLine(p.displayName, p.issues || [], p.suppressed)}\n`;
       }
     }
     logUpdate(output);
   }
+}
+
+export function issueSummaryLine(name: string, issues: Issue[], suppressed = 0): string {
+  const suppressedNote = suppressed > 0 ? `${suppressed} suppressed by markers` : '';
+  if (issues.length === 0) {
+    const note = suppressedNote ? ` (${suppressedNote})` : '';
+    return `  ${colors.green('✔')} ${name}: 0 issues${note}`;
+  }
+  const details = [severityCounts(issues), suppressedNote].filter(Boolean).join('; ');
+  return `  ${colors.red('✘')} ${colors.bold(name)}: ${issues.length} issues (${details})`;
+}
+
+function severityCounts(issues: Issue[]): string {
+  const highs = issues.filter(i => i.severity === 'high').length;
+  const meds = issues.filter(i => i.severity === 'medium').length;
+  const lows = issues.filter(i => i.severity === 'low').length;
+  return [
+    highs > 0 ? colors.red(`${highs} High`) : '',
+    meds > 0 ? colors.yellow(`${meds} Med`) : '',
+    lows > 0 ? colors.blue(`${lows} Low`) : ''
+  ].filter(Boolean).join(', ');
 }
 
 function firstLine(text: string = ''): string {

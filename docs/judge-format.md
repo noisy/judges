@@ -44,6 +44,8 @@ Evaluate the code for Single Responsibility Principle (SRP) violations.
 
 ## Rule Files
 
+Deviations from a rule are marked in the code with `rule-ignore` / `rule-todo` markers; see [markers.md](markers.md).
+
 A rule is a flat Markdown file `<dir>/<id>.md`, loaded from every directory passed with `--rules <dir>` (repeatable). Rules override `JUDGE.md` judges with the same id. The body holds the instructions: an `Intent` in one sentence, then the rule.
 
 | Field | Type | Required | Default | Description |

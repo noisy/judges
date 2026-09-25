@@ -1,7 +1,8 @@
 import { Judge } from './judges.js';
+import { Marker } from './markers.js';
 import { EvaluationContext } from './types.js';
 
-export function constructPrompt(judge: Judge, inputContext: EvaluationContext): string {
+export function constructPrompt(judge: Judge, inputContext: EvaluationContext, markers: Marker[] = []): string {
   let contextSection = '';
 
   if (inputContext.type === 'diff') {
@@ -41,7 +42,21 @@ Judge Name: ${judge.name || judge.id}
 Instructions to follow for your evaluation:
 ${judge.instructions}
 
-Input Context to Review:
+${markersSection(markers)}Input Context to Review:
 ${contextSection}
 `;
+}
+
+// The judge contract: marked places are accounted for, so the judge need not report them.
+export function markersSection(markers: Marker[]): string {
+  if (markers.length === 0) return '';
+  const entries = markers.map((marker) => `- ${markerLocation(marker)} (rule-${marker.kind}): ${marker.reason}`);
+  return `Markers (accounted for, do not report findings at these places):
+${entries.join('\n')}
+
+`;
+}
+
+function markerLocation(marker: Marker): string {
+  return marker.scope === 'file' ? `${marker.file} (whole file)` : `${marker.file}:${marker.scope.line}`;
 }

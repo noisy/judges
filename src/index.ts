@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 import { parseArgs, AppConfig } from './config.js';
 import { extractDiff } from './diff.js';
-import { resolvePaths, readContents } from './files.js';
+import { resolvePaths, readContents, repoRoot } from './files.js';
 import { discoverJudges, selectJudges, Judge } from './judges.js';
-import { ProgressRenderer } from './ui.js';
+import { ProgressRenderer, issueSummaryLine } from './ui.js';
 import { EvaluationContext, JudgeResult } from './types.js';
 import { runPlan } from './runner.js';
 import { buildPlan } from './plan.js';
+import { auditMarkers } from './marker-audit.js';
+import { findMarkersInFiles } from './markers.js';
+import { groupByRule, formatInventory } from './inventory.js';
 import { formatIssuesList, formatJudgeFailure } from './format.js';
 import { shouldBlock } from './gate.js';
 import colors from 'picocolors';
@@ -31,7 +34,12 @@ async function main() {
     return;
   }
 
-  const judges = loadJudgesOrExit(config);
+  if (config.command === 'markers') {
+    printMarkerInventory(config);
+    return;
+  }
+
+  const { loaded, selected: judges } = loadJudgesOrExit(config);
 
   if (config.command === 'config') {
     if (config.configAction === 'check') {
@@ -91,7 +99,7 @@ async function main() {
     return;
   }
   
-  const results = await orchestrateEvaluation(validJudges, inputContext, config);
+  const results = await orchestrateEvaluation(validJudges, inputContext, loaded.map(j => j.id), config);
 
   if (config.json) {
     console.log(JSON.stringify(results, null, 2));
@@ -108,10 +116,24 @@ main().catch((error) => {
   process.exit(1);
 });
 
-function loadJudgesOrExit(config: AppConfig): Judge[] {
+// Markers may name any loaded rule, so the full set is kept next to the --only selection.
+function loadJudgesOrExit(config: AppConfig): { loaded: Judge[]; selected: Judge[] } {
   try {
-    const judges = discoverJudges(config.ruleDirs);
-    return config.command === 'config' ? judges : selectJudges(judges, config.only);
+    const loaded = discoverJudges(config.ruleDirs);
+    const selected = config.command === 'config' ? loaded : selectJudges(loaded, config.only);
+    return { loaded, selected };
+  } catch (error: any) {
+    console.error(colors.red(`❌ Error: ${error.message}`));
+    process.exit(1);
+  }
+}
+
+// Lists markers in the given paths, or in the whole repository by default.
+function printMarkerInventory(config: AppConfig): void {
+  try {
+    const paths = config.paths.length > 0 ? config.paths : [repoRoot()];
+    const groups = groupByRule(findMarkersInFiles(readContents(resolvePaths(paths)).files));
+    console.log(config.json ? JSON.stringify(groups, null, 2) : formatInventory(groups));
   } catch (error: any) {
     console.error(colors.red(`❌ Error: ${error.message}`));
     process.exit(1);
@@ -146,7 +168,12 @@ function resolveInputContext(config: AppConfig): EvaluationContext {
   return extractDiff('head');
 }
 
-async function orchestrateEvaluation(judges: Judge[], inputContext: EvaluationContext, config: AppConfig): Promise<JudgeResult[]> {
+async function orchestrateEvaluation(
+  judges: Judge[],
+  inputContext: EvaluationContext,
+  knownRuleIds: string[],
+  config: AppConfig
+): Promise<JudgeResult[]> {
   const renderer = new ProgressRenderer(judges);
   
   if (!config.json) {
@@ -154,10 +181,13 @@ async function orchestrateEvaluation(judges: Judge[], inputContext: EvaluationCo
   }
 
   const plan = buildPlan(judges, inputContext);
-  const results = await runPlan(plan, config.engine, (event) => renderer.update(event));
+  const judgeResults = await runPlan(plan, config.engine, (event) => renderer.update(event));
+  const markerAudit = auditMarkers(inputContext, knownRuleIds);
+  const results = markerAudit.issues.length > 0 ? [...judgeResults, markerAudit] : judgeResults;
 
   if (!config.json) {
     renderer.stop();
+    if (markerAudit.issues.length > 0) console.log(issueSummaryLine(markerAudit.displayName, markerAudit.issues));
     printHumanReadableResults(results, config);
   }
 
@@ -181,7 +211,8 @@ function printHumanReadableResults(results: JudgeResult[], config: AppConfig): v
 
 function printHelp(): void {
   console.log(`
-Usage: judge [options]
+Usage: judge [options] [paths...]
+       judge markers [paths...] [--json]   List rule-ignore / rule-todo markers, grouped by rule
 
 Options:
   --file, -f   Evaluate a specific file or files instead of git diff
