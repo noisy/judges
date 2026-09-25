@@ -60,4 +60,10 @@ describe('CLI Configuration Parsing', () => {
     args = parseArgs(['--engine', 'unknown']);
     expect(args.engine).toBe('claude'); // Fallback to default
   });
+
+  it('should collect repeatable --rules directories', () => {
+    expect(parseArgs([]).ruleDirs).toEqual([]);
+    expect(parseArgs(['--rules', 'rules']).ruleDirs).toEqual(['rules']);
+    expect(parseArgs(['--rules', 'rules', '--rules', 'shared/rules']).ruleDirs).toEqual(['rules', 'shared/rules']);
+  });
 });

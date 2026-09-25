@@ -30,7 +30,7 @@ async function main() {
     return;
   }
 
-  const judges = discoverJudges();
+  const judges = loadJudgesOrExit(config);
 
   if (config.command === 'config') {
     if (config.configAction === 'check') {
@@ -45,11 +45,12 @@ async function main() {
 
       let hasErrors = false;
     for (const j of judgesToCheck) {
+      const fileName = path.basename(j.filePath);
       if (j.isValid) {
-        console.log(colors.green(`✔ ${j.id} JUDGE.md is valid (v${j.version} · ${j.mode} · ${j.timeout_seconds}s)`));
+        console.log(colors.green(`✔ ${j.id} ${fileName} is valid (${describeSettings(j)})`));
       } else {
         hasErrors = true;
-        console.log(colors.red(`✘ ${j.id} JUDGE.md is invalid`));
+        console.log(colors.red(`✘ ${j.id} ${fileName} is invalid`));
         for (const err of j.validationErrors) {
            console.log(colors.red(`  └─ ${err}`));
         }
@@ -66,8 +67,7 @@ async function main() {
   const validJudges = judges.filter(j => {
     if (!j.isValid) {
       if (!config.json) {
-        const dir = path.dirname(j.filePath);
-        console.warn(colors.yellow(`⚠ skipping ${dir} — invalid JUDGE.md:\n  └─ ${j.validationErrors.join('\n  └─ ')}`));
+        console.warn(colors.yellow(`⚠ skipping ${j.filePath} — invalid:\n  └─ ${j.validationErrors.join('\n  └─ ')}`));
       }
       return false;
     }
@@ -75,7 +75,7 @@ async function main() {
   });
 
   if (validJudges.length === 0) {
-    console.log("No valid judges found in ~/.judge/judges/ or ./.judge/judges/");
+    console.log("No valid judges found in ~/.judge/judges/, ./.judge/judges/ or --rules directories");
     return;
   }
 
@@ -106,6 +106,22 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+function loadJudgesOrExit(config: AppConfig): Judge[] {
+  try {
+    return discoverJudges(config.ruleDirs);
+  } catch (error: any) {
+    console.error(colors.red(`❌ Error: ${error.message}`));
+    process.exit(1);
+  }
+}
+
+function describeSettings(judge: Judge): string {
+  if (judge.format === 'rule') {
+    return `${judge.severity} · ${judge.check} · ${judge.timeout_seconds}s`;
+  }
+  return `v${judge.version} · ${judge.mode} · ${judge.timeout_seconds}s`;
+}
 
 function resolveInputContext(config: AppConfig): EvaluationContext {
   if (config.paths.length > 0) {
@@ -176,6 +192,7 @@ Options:
   --short, -s  Only show the summarization line per judge (0 issues detailed)
   --full       Show all issues found by judges
   --top <X>    Show the top X issues per judge (Default: 3)
+  --rules <dir> Load flat rule files (<dir>/<id>.md); repeatable, overrides judges with the same id
   --help, -h   Show this help message
   --version, -v Show the version number
   `);
