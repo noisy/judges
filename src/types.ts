@@ -42,7 +42,8 @@ export interface JudgeResult {
   durationMs: number;
   costUsd?: number;
   turns?: number;
-  examined?: ExaminedTarget[];
+  inline?: string[]; // files given to the judge in the prompt
+  examined?: ExaminedTarget[]; // what an agent judge read or searched on its own
   error?: string;
   skipReason?: string;
 }

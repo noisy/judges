@@ -50,6 +50,7 @@ async function runJudge(
     durationMs: Date.now() - startedAt,
     costUsd: outcome.costUsd,
     turns: outcome.turns,
+    inline: context.files.map((file) => file.path),
     examined: outcome.examined,
     error: outcome.error
   };

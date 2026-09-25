@@ -71,6 +71,15 @@ describe('runPlan outcome mapping', () => {
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: '/fixture-repo' }));
   });
 
+  it('records which files the judge was given in the prompt', async () => {
+    run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
+    const context: EvaluationContext = { type: 'files', files: [{ path: 'src/a.py', content: 'x' }, { path: 'src/b.py', content: 'y' }] };
+
+    const [result] = await runPlan([{ judge, context, markers: [] }], 'claude');
+
+    expect(result.inline).toEqual(['src/a.py', 'src/b.py']);
+  });
+
   it('keeps what an agent judge examined in the result', async () => {
     const examined = [{ tool: 'Read', target: 'tests/test_a.py' }];
     run.mockResolvedValue({ rawOutput: '[]', durationMs: 5, examined });

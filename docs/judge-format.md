@@ -106,10 +106,11 @@ Intent: every connector has an integration test.
 - **Defaults.** `tools: [Read, Grep, Glob]`, `max_turns: 8`, and a 120 s timeout when neither `budget` nor `timeout_seconds` sets one.
 - **Validation.** `tools` on a one-shot judge is an error. A tool outside `Read`, `Grep`, `Glob` is an error on any judge: judges are read-only by construction.
 - **Engines.** Only `claude` runs agent judges. `codex` and `gemini` report the judge as an error, `agent mode not supported by <engine>`, never a silent one-shot run.
-- **Working directory.** The repository root: the git root, or `--root <dir>`. File paths are shown relative to it. One-shot judges run in a temp dir, so no repository `CLAUDE.md` reaches them.
+- **Working directory.** The repository root: the git root, or `--root <dir>` (file input only). File paths are shown relative to it. One-shot judges run in a temp dir, so no repository `CLAUDE.md` reaches them.
+- **Known limitation: the repository's `CLAUDE.md`.** Agent judges run in the repository root, so the CLI auto-loads that repository's own `CLAUDE.md`, which can influence the judge. `--bare` would stop it, but it also turns off OAuth and keychain login, so it is not used.
 - **Committed content.** The files in the prompt are what is being committed (the staged content in `--staged` mode). The judge is told the files on disk may differ.
 - **Line numbers.** In both modes file contents are shown as `  17| code` and the judge reports those numbers, so findings land on the lines markers cover.
-- **Run record.** Every tool call is recorded in the result as `examined: [{ tool, target, denied? }]`. The summary line shows counts, e.g. `(read 2 files, 4 searches)`; `--json` has the full list.
+- **Run record.** The result lists the files given in the prompt as `inline: [paths]` (every judge), and every tool call as `examined: [{ tool, target, denied? }]`. The summary line shows counts, e.g. `(read 2 files, 4 searches)`; `--json` has the full list.
 
 ### Sandbox
 
