@@ -8,7 +8,7 @@ import { SEVERITY_SCORE } from './config.js';
 import { repoRoot } from './files.js';
 import { EvaluationContext, Issue, JudgeEvent, JudgeResult, SupportedEngine } from './types.js';
 
-type JudgeOutcome = Pick<JudgeResult, 'status' | 'issues' | 'suppressed' | 'error' | 'costUsd' | 'turns'>;
+type JudgeOutcome = Pick<JudgeResult, 'status' | 'issues' | 'suppressed' | 'error' | 'costUsd' | 'turns' | 'examined'>;
 export type ProgressListener = (event: JudgeEvent) => void;
 
 export async function runPlan(
@@ -50,6 +50,7 @@ async function runJudge(
     durationMs: Date.now() - startedAt,
     costUsd: outcome.costUsd,
     turns: outcome.turns,
+    examined: outcome.examined,
     error: outcome.error
   };
 }
@@ -69,7 +70,8 @@ async function evaluateJudge(
     const response = await getEngine(engine).run(buildEngineRequest(judge, prompt, context.root ?? repoRoot()));
     const issues = attributeToRule(judge, parseLLMOutput(response.rawOutput));
     const { kept, suppressed } = dropCovered(judge, issues, markers);
-    return { status: 'ok', issues: sortBySeverity(kept), suppressed, costUsd: response.costUsd, turns: response.turns };
+    return { status: 'ok', issues: sortBySeverity(kept), suppressed, costUsd: response.costUsd, turns: response.turns,
+      examined: response.examined };
   } catch (error: any) {
     const status = error instanceof TimeoutError ? 'timeout' : 'error';
     return { status, issues: [], error: error.message };

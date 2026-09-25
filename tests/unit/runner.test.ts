@@ -71,6 +71,15 @@ describe('runPlan outcome mapping', () => {
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: '/fixture-repo' }));
   });
 
+  it('keeps what an agent judge examined in the result', async () => {
+    const examined = [{ tool: 'Read', target: 'tests/test_a.py' }];
+    run.mockResolvedValue({ rawOutput: '[]', durationMs: 5, examined });
+
+    const [result] = await runPlan([planned()], 'claude');
+
+    expect(result.examined).toEqual(examined);
+  });
+
   it('maps unparseable engine output to status error', async () => {
     run.mockResolvedValue({ rawOutput: 'not json', durationMs: 5 });
 

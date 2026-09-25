@@ -1,4 +1,4 @@
-import { SupportedEngine } from '../types.js';
+import { ExaminedTarget, SupportedEngine } from '../types.js';
 
 export interface EngineRequest {
   prompt: string;
@@ -15,6 +15,7 @@ export interface EngineResponse {
   rawOutput: string;
   costUsd?: number;
   turns?: number;
+  examined?: ExaminedTarget[];
   durationMs: number;
 }
 

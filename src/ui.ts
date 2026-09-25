@@ -1,7 +1,7 @@
 import logUpdate from 'log-update';
 import colors from 'picocolors';
 import { Judge, displayName } from './judges.js';
-import { Issue, JudgeEvent, JudgeStatus } from './types.js';
+import { ExaminedTarget, Issue, JudgeEvent, JudgeStatus } from './types.js';
 
 export type JudgeState = 'pending' | 'running' | 'done';
 
@@ -11,6 +11,7 @@ interface JudgeProgress {
   state: JudgeState;
   issues?: Issue[];
   suppressed?: number;
+  examined?: ExaminedTarget[];
   status?: JudgeStatus;
   error?: string;
   skipReason?: string;
@@ -37,6 +38,7 @@ export class ProgressRenderer {
       p.status = event.result.status;
       p.issues = event.result.issues;
       p.suppressed = event.result.suppressed;
+      p.examined = event.result.examined;
       p.error = event.result.error;
       p.skipReason = event.result.skipReason;
     }
@@ -73,21 +75,34 @@ export class ProgressRenderer {
       } else if (p.state === 'done' && p.status === 'error') {
          output += `  ${colors.yellow('⚠')} ${colors.bold(p.displayName)}: error — ${firstLine(p.error)}\n`;
       } else if (p.state === 'done') {
-         output += `${issueSummaryLine(p.displayName, p.issues || [], p.suppressed)}\n`;
+         output += `${issueSummaryLine(p.displayName, p.issues || [], p.suppressed, p.examined)}\n`;
       }
     }
     logUpdate(output);
   }
 }
 
-export function issueSummaryLine(name: string, issues: Issue[], suppressed = 0): string {
+export function issueSummaryLine(name: string, issues: Issue[], suppressed = 0, examined: ExaminedTarget[] = []): string {
   const suppressedNote = suppressed > 0 ? `${suppressed} suppressed by markers` : '';
+  const examinedNote = examinedSummary(examined);
   if (issues.length === 0) {
-    const note = suppressedNote ? ` (${suppressedNote})` : '';
-    return `  ${colors.green('✔')} ${name}: 0 issues${note}`;
+    const notes = [suppressedNote, examinedNote].filter(Boolean).join('; ');
+    return `  ${colors.green('✔')} ${name}: 0 issues${notes ? ` (${notes})` : ''}`;
   }
-  const details = [severityCounts(issues), suppressedNote].filter(Boolean).join('; ');
+  const details = [severityCounts(issues), suppressedNote, examinedNote].filter(Boolean).join('; ');
   return `  ${colors.red('✘')} ${colors.bold(name)}: ${issues.length} issues (${details})`;
+}
+
+// "read 4 files, 2 searches": what an agent judge looked at; the full list is in --json.
+export function examinedSummary(examined: ExaminedTarget[]): string {
+  const reads = new Set(examined.filter(e => e.tool === 'Read').map(e => e.target)).size;
+  const searches = examined.filter(e => e.tool === 'Grep' || e.tool === 'Glob').length;
+  const listings = examined.filter(e => e.tool === 'LS').length;
+  return [
+    reads > 0 ? `read ${reads} ${reads === 1 ? 'file' : 'files'}` : '',
+    searches > 0 ? `${searches} ${searches === 1 ? 'search' : 'searches'}` : '',
+    listings > 0 ? `${listings} ${listings === 1 ? 'listing' : 'listings'}` : ''
+  ].filter(Boolean).join(', ');
 }
 
 function severityCounts(issues: Issue[]): string {

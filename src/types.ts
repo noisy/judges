@@ -23,6 +23,13 @@ export interface Issue {
   confidence?: 'high' | 'medium' | 'low';
 }
 
+// One tool call an agent judge made: what it read, searched or listed.
+export interface ExaminedTarget {
+  tool: string;
+  target: string;
+  denied?: boolean; // the sandbox refused it, e.g. a path outside the repository
+}
+
 export type JudgeStatus = 'ok' | 'error' | 'timeout' | 'skipped';
 
 export interface JudgeResult {
@@ -35,6 +42,7 @@ export interface JudgeResult {
   durationMs: number;
   costUsd?: number;
   turns?: number;
+  examined?: ExaminedTarget[];
   error?: string;
   skipReason?: string;
 }
