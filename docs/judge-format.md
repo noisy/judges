@@ -62,6 +62,7 @@ A rule is a flat Markdown file `<dir>/<id>.md`, loaded from every directory pass
 | `budget` | `string` | No | - | Time and cost caps, e.g. `30s, $0.10` or `2m`. Either part is optional. The time part sets `timeout_seconds`; setting both is an error. |
 | `mode` | `'one-shot' \| 'agent'` | No | `'one-shot'` | Same as for `JUDGE.md`. |
 | `tools` | `string[]` | No | agent: `[Read, Grep, Glob]` | Only with `mode: agent`. Read-only tools only: `Read`, `Grep`, `Glob`, `LS`. |
+| `allow_read` | `string[]` | No | `[]` | Only with `mode: agent`. Directories outside the repo the judge may read. See [Reading outside the repo](#reading-outside-the-repo). |
 | `max_turns` | `number` | No | agent: `8` | Turn cap. Must be a positive integer. |
 | `timeout_seconds` | `number` | No | `30`, agent: `120` | Same as for `JUDGE.md`. |
 
@@ -120,9 +121,32 @@ Every claude judge runs with:
 | `--restricted` | Confines `Read`, `Grep` and `Glob` to the working directory. Absolute paths, `../` and symlinks pointing out of it are refused, whatever the settings allow. |
 | `--permission-mode dontAsk`, `--permission-prompts none` | Anything not pre-approved is denied at once instead of waiting for an answer, so a print-mode run never hangs on a prompt. |
 | `--disallowedTools Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch` | Write, exec and network tools stay out even if `--tools` ever named one. |
+| `--settings '{"permissions":{...}}'` | Deny rules for secrets on every run, plus the allow rules for `allow_read`. |
+| `--add-dir <dir>` | One per `allow_read` directory; nothing otherwise. |
 | `--strict-mcp-config`, `--setting-sources ''`, `--no-session-persistence` | Minimal configuration: no MCP servers, hooks, settings or sessions inherited from the developer. |
 
 Verified on claude 2.1.282 with a canary file in `/tmp`: an agent judge told to read it, glob for it, or reach it through `../` or a symlink was refused each time (the calls show up as `denied` in `examined`), while reading files in the repository worked. A judge told to create a file had no tool to do it, and no file was created. Runs took 12 to 18 seconds; none waited on a prompt.
+
+### Reading outside the repo
+
+Repo only is the default. Services often live side by side in one parent folder, and a judge may need a sibling, for example to check how the API a connector calls is really shaped. `allow_read` names those directories:
+
+```markdown
+---
+id: client-matches-billing-api
+mode: agent
+scope: ["src/clients/billing/**/*.py"]
+allow_read: ["../billing-service/**", "../shared-contracts/**"]
+---
+Intent: the billing client calls endpoints the billing service really exposes, with the fields it really expects.
+```
+
+- **Forms.** Relative to the repo root (`../billing-service`), absolute (`/srv/contracts`) or home (`~/contracts`), optionally ending in `/**`. Each entry is a whole directory: the sandbox grants whole directories, so a narrower glob such as `../billing-service/*.py` is a validation error rather than a promise it cannot keep.
+- **Mapping.** Each directory joins the working directories with `--add-dir`, and a matching `Read(//<dir>/**)` allow rule goes into `--settings`. `--restricted` still refuses everything else outside the repo.
+- **Secrets floor.** On every run, whitelisted or not, reads matching `**/.env*`, `**/.ssh/**`, `**/.aws/**`, `**/.claude*/**`, `**/*.pem` or `**/*key*.json` are denied, and Grep skips those files. The list is `SECRET_DENY_PATTERNS` in `src/engines/claude.ts`.
+- **Run record.** `examined` shows reads outside the repo with their full path, so a use of the whitelist is visible.
+
+Verified on claude 2.1.282 with a repo and a whitelisted sibling side by side in `/tmp`, twice: `../billing/docs/api.txt` in the sibling was read; `../billing/.env` and `../billing/docs/service-key.json` were denied; a Grep over the sibling for the canary text in those two files found nothing; a canary file in `/tmp` outside both stayed denied. None of the denied canary strings appeared in the output.
 
 ## Validating Judges
 
