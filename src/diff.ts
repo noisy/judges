@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
 import { EvaluationContext } from './types.js';
+import { repoRoot } from './files.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -76,11 +77,12 @@ function parseModifiedFiles(command: string, mode: 'staged' | 'diff' | 'head' | 
   if (!gitStatusOutput) return files;
   
   const lines = gitStatusOutput.split('\n').filter(l => l.trim());
+  const root = repoRoot();
   for (const line of lines) {
     const parsed = parseNameStatusLine(line);
     if (!parsed) continue;
 
-    const content = loadFileContent(parsed.filePath, mode);
+    const content = loadFileContent(parsed.filePath, mode, root);
     if (content !== null) {
       files.push({ path: parsed.filePath, content });
     }
@@ -106,12 +108,14 @@ function parseNameStatusLine(line: string): { status: string, filePath: string }
   return { status, filePath };
 }
 
-function loadFileContent(filePath: string, mode: 'staged' | 'diff' | 'head' | 'last-commit'): string | null {
+// Git reports paths relative to the repository root, so the working-tree copy is read from there, not from cwd.
+// The tree specs `:<path>` and `HEAD:<path>` are root-relative too (only `./` makes them cwd-relative).
+function loadFileContent(filePath: string, mode: 'staged' | 'diff' | 'head' | 'last-commit', root: string): string | null {
   try {
     if (mode === 'staged' || mode === 'last-commit') {
       return readFromGitTree(filePath, mode);
     } else {
-      const fullPath = path.resolve(process.cwd(), filePath);
+      const fullPath = path.resolve(root, filePath);
       if (fs.existsSync(fullPath)) {
           return fs.readFileSync(fullPath, 'utf-8');
       }
