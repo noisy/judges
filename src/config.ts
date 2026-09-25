@@ -28,6 +28,15 @@ export interface AppConfig {
   configTarget?: string;
 }
 
+export const ROOT_NEEDS_FILE_INPUT = '--root is only supported with file input';
+
+// Diff paths are relative to the git root, so a different root would not match them.
+export function inputUsageError(config: AppConfig): string | undefined {
+  const hasFileInput = config.paths.length > 0 || config.file !== undefined;
+  if (config.command === undefined && config.root !== undefined && !hasFileInput) return ROOT_NEEDS_FILE_INPUT;
+  return undefined;
+}
+
 export function parseArgs(argv: string[]): AppConfig {
   const parsed = mri(argv, {
     string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules', 'only', 'root'],
