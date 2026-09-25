@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { EvaluationContext } from './types.js';
 
 export const MAX_FILES = 100;
@@ -80,12 +81,13 @@ export function resolvePaths(filepaths: string | string[]): string[] {
   return resolvedFiles;
 }
 
-export function readContents(filepaths: string[]): EvaluationContext {
+// Paths are shown relative to the repository root, the same base git diff uses, so scope globs and markers match in both modes.
+export function readContents(filepaths: string[], baseDir: string = repoRoot()): EvaluationContext {
   const files: { path: string, content: string }[] = [];
   let linesChanged = 0;
 
   for (const fullPath of filepaths) {
-    const displayPath = path.relative(process.cwd(), fullPath);
+    const displayPath = path.relative(baseDir, fullPath);
     const readResult = readFileSafely(fullPath);
     
     if (readResult.skipBinary) {
@@ -109,6 +111,15 @@ export function readContents(filepaths: string[]): EvaluationContext {
     files,
     stats: { filesChanged: files.length, linesChanged }
   };
+}
+
+// The git repository root, or the directory itself outside a repository.
+export function repoRoot(cwd: string = process.cwd()): string {
+  try {
+    return execSync('git rev-parse --show-toplevel', { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return cwd;
+  }
 }
 
 function readFileSafely(fullPath: string): { content?: string, error?: string, skipBinary?: boolean } {
