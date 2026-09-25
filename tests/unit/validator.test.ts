@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateJudge } from '../../src/validator.js';
+import { validateJudge, validateRule, parseBudget } from '../../src/validator.js';
 
 describe('Zod Schema Frontend Validation (`validateJudge`)', () => {
   it('should accept a completely valid configuration', () => {
@@ -102,5 +102,78 @@ describe('Zod Schema Frontend Validation (`validateJudge`)', () => {
     result = validateJudge(data);
     expect(result.valid).toBe(false);
     expect(result.errors[0]).toContain('`timeout_seconds` must be an integer');
+  });
+});
+
+describe('parseBudget', () => {
+  it.each([
+    ['30s, $0.10', { timeout_seconds: 30, max_budget_usd: 0.1 }],
+    ['2m', { timeout_seconds: 120 }],
+    ['$1.5', { max_budget_usd: 1.5 }],
+    ['$0.10, 45s', { timeout_seconds: 45, max_budget_usd: 0.1 }],
+  ])('parses %s', (input, expected) => {
+    expect(parseBudget(input)).toEqual(expected);
+  });
+
+  it.each(['', '30', '30h', '0s', '$0', '30s, 40s', '30s,', 'ten seconds'])('rejects %j', (input) => {
+    expect(parseBudget(input)).toBeNull();
+  });
+});
+
+describe('validateRule', () => {
+  it('should accept a minimal rule and apply defaults', () => {
+    const result = validateRule({ id: 'booleans' }, 'booleans');
+    expect(result.valid).toBe(true);
+    expect(result.data).toMatchObject({
+      name: 'booleans', description: '', version: '', scope: ['**/*'], severity: 'medium',
+      check: 'judge', tools: [], timeout_seconds: 30, mode: 'one-shot',
+    });
+  });
+
+  it('should require an id', () => {
+    const result = validateRule({ severity: 'high' }, 'booleans');
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain('id');
+  });
+
+  it('should reject an id that does not match the file name', () => {
+    const result = validateRule({ id: 'other' }, 'booleans');
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('error: `id` "other" must match the file name "booleans"');
+  });
+
+  it('should take timeout_seconds from budget', () => {
+    const result = validateRule({ id: 'r', budget: '2m, $0.50' }, 'r');
+    expect(result.data).toMatchObject({ timeout_seconds: 120, max_budget_usd: 0.5 });
+    expect(result.data).not.toHaveProperty('budget');
+  });
+
+  it('should reject a malformed budget', () => {
+    const result = validateRule({ id: 'r', budget: 'fast' }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toContain('`budget` must look like');
+  });
+
+  it('should reject budget time together with timeout_seconds', () => {
+    const result = validateRule({ id: 'r', budget: '30s', timeout_seconds: 10 }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toContain('cannot both be set');
+  });
+
+  it('should allow budget cost together with timeout_seconds', () => {
+    const result = validateRule({ id: 'r', budget: '$0.10', timeout_seconds: 10 }, 'r');
+    expect(result.data).toMatchObject({ timeout_seconds: 10, max_budget_usd: 0.1 });
+  });
+
+  it('should reject a command on a judge rule', () => {
+    const result = validateRule({ id: 'r', command: 'npm test' }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toContain('only allowed with `check: deterministic`');
+  });
+
+  it('should reject non-positive max_turns', () => {
+    const result = validateRule({ id: 'r', max_turns: 0 }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toContain('`max_turns` must be positive');
   });
 });

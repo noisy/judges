@@ -7,27 +7,141 @@ export interface ValidationResult {
   data?: any;
 }
 
+export interface Budget {
+  timeout_seconds?: number;
+  max_budget_usd?: number;
+}
+
 const semverRegex = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-zA-Z0-9-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-zA-Z0-9-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
+
+const DEFAULT_TIMEOUT_SECONDS = 30;
+const SECONDS_PER_UNIT: Record<string, number> = { s: 1, m: 60 };
+const BUDGET_FORMAT_ERROR = '`budget` must look like "30s, $0.10" (time in s or m, cost in $, either part optional)';
+
+const settingsFields = {
+  mode: z.enum(['one-shot', 'agent']).optional().default('one-shot'),
+
+  timeout_seconds: z.number().int('`timeout_seconds` must be an integer')
+    .positive('`timeout_seconds` must be positive')
+    .optional(),
+
+  budget: z.string().transform((value, ctx) => {
+    const budget = parseBudget(value);
+    if (!budget) {
+      ctx.addIssue({ code: 'custom', message: BUDGET_FORMAT_ERROR });
+      return z.NEVER;
+    }
+    return budget;
+  }).optional(),
+
+  scope: z.array(z.string().min(1, '`scope` globs cannot be empty')).optional().default(['**/*']),
+
+  severity: z.enum(['low', 'medium', 'high']).optional().default('medium'),
+
+  check: z.enum(['judge', 'deterministic']).optional().default('judge'),
+
+  model: z.string().min(1, '`model` cannot be empty').optional(),
+
+  tools: z.array(z.string().min(1, '`tools` entries cannot be empty')).optional().default([]),
+
+  max_turns: z.number().int('`max_turns` must be an integer')
+    .positive('`max_turns` must be positive')
+    .optional(),
+
+  command: z.string().min(1, '`command` cannot be empty').optional(),
+};
 
 const JudgeSchema = z.object({
   name: z.string().min(1, '`name` cannot be empty'),
-  
+
   description: z.string().min(1, '`description` cannot be empty'),
-  
+
   version: z.string().regex(semverRegex, '`version` must be a valid semver'),
-  
-  mode: z.enum(['one-shot', 'agent']).optional().default('one-shot'),
-  
-  timeout_seconds: z.number().int('`timeout_seconds` must be an integer')
-    .positive('`timeout_seconds` must be positive')
-    .optional()
-    .default(30)
-});
+
+  ...settingsFields,
+}).superRefine(checkSettingsConsistency).transform(resolveBudget);
+
+const RuleSchema = z.object({
+  id: z.string().min(1, '`id` cannot be empty'),
+
+  name: z.string().min(1, '`name` cannot be empty').optional(),
+
+  description: z.string().optional().default(''),
+
+  version: z.string().regex(semverRegex, '`version` must be a valid semver').optional().default(''),
+
+  ...settingsFields,
+}).superRefine(checkSettingsConsistency)
+  .transform(resolveBudget)
+  .transform(rule => ({ ...rule, name: rule.name ?? rule.id }));
 
 export function validateJudge(data: any): ValidationResult {
+  return toValidationResult(JudgeSchema.safeParse(data));
+}
+
+export function validateRule(data: any, fileId: string): ValidationResult {
+  const result = toValidationResult(RuleSchema.safeParse(data));
+  if (data?.id !== undefined && data.id !== fileId) {
+    result.errors.push(`error: \`id\` "${data.id}" must match the file name "${fileId}"`);
+    return { ...result, valid: false, data: undefined };
+  }
+  return result;
+}
+
+// Settings an invalid judge falls back to, so it can still be listed and reported.
+export function defaultSettings() {
+  return resolveBudget(z.object(settingsFields).parse({}));
+}
+
+// "30s, $0.10" -> { timeout_seconds: 30, max_budget_usd: 0.1 }; null when malformed.
+export function parseBudget(value: string): Budget | null {
+  const parts = value.split(',').map(part => part.trim());
+  const budget: Budget = {};
+
+  for (const part of parts) {
+    const time = part.match(/^(\d+)(s|m)$/);
+    const cost = part.match(/^\$(\d+(?:\.\d+)?)$/);
+
+    if (time && budget.timeout_seconds === undefined) {
+      budget.timeout_seconds = Number(time[1]) * SECONDS_PER_UNIT[time[2]];
+    } else if (cost && budget.max_budget_usd === undefined) {
+      budget.max_budget_usd = Number(cost[1]);
+    } else {
+      return null;
+    }
+  }
+
+  const hasZero = budget.timeout_seconds === 0 || budget.max_budget_usd === 0;
+  return hasZero ? null : budget;
+}
+
+interface SettingsInput {
+  timeout_seconds?: number;
+  budget?: Budget;
+  check: 'judge' | 'deterministic';
+  command?: string;
+}
+
+function checkSettingsConsistency(data: SettingsInput, ctx: z.RefinementCtx): void {
+  if (data.timeout_seconds !== undefined && data.budget?.timeout_seconds !== undefined) {
+    ctx.addIssue({ code: 'custom', path: ['budget'], message: '`budget` time and `timeout_seconds` cannot both be set' });
+  }
+  if (data.command !== undefined && data.check !== 'deterministic') {
+    ctx.addIssue({ code: 'custom', path: ['command'], message: '`command` is only allowed with `check: deterministic`' });
+  }
+}
+
+function resolveBudget<T extends SettingsInput>({ budget, ...rest }: T) {
+  return {
+    ...rest,
+    timeout_seconds: rest.timeout_seconds ?? budget?.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS,
+    max_budget_usd: budget?.max_budget_usd,
+  };
+}
+
+function toValidationResult(parsed: z.ZodSafeParseResult<any>): ValidationResult {
   const warnings: string[] = [];
-  
-  const parsed = JudgeSchema.safeParse(data);
+
   if (!parsed.success) {
     const errors = parsed.error.issues.map(i => {
       // If it's a custom error message from errorMap or explicit strings above, use it directly.
@@ -43,7 +157,7 @@ export function validateJudge(data: any): ValidationResult {
   // Non-fatal warning for agent mode
   if (validData.mode === 'agent') {
     warnings.push('`mode`: agent mode not yet implemented, falling back to one-shot');
-    validData.mode = 'one-shot'; 
+    validData.mode = 'one-shot';
   }
 
   return { valid: true, errors: [], warnings, data: validData };
