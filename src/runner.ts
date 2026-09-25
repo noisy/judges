@@ -1,56 +1,53 @@
-import { executeLLM } from './llm.js';
+import { executeLLM, TimeoutError } from './llm.js';
 import { constructPrompt } from './prompt.js';
 import { JudgeProgress } from './ui.js';
+import { Judge } from './judges.js';
 import { SEVERITY_SCORE } from './config.js';
-import { EvaluationContext, Issue, SupportedEngine } from './types.js';
+import { EvaluationContext, Issue, JudgeResult, SupportedEngine } from './types.js';
+
+type JudgeOutcome = Pick<JudgeResult, 'status' | 'issues' | 'error'>;
 
 export async function runJudgesParallel(
   progressList: JudgeProgress[],
   inputContext: EvaluationContext,
   engine: SupportedEngine
-): Promise<any[]> {
-  const promises = progressList.map(async (p) => {
-    p.state = 'running';
-    try {
-      const prompt = constructPrompt(p.judge, inputContext);
-      const timeoutMs = (p.judge.timeout_seconds || 30) * 1000;
-      const issues = await executeLLM(prompt, engine, timeoutMs);
-      p.state = 'done';
-      p.issues = issues;
-      
-      return { 
-        judge: p.displayName, 
-        file: p.judge.filePath, 
-        issues 
-      };
-    } catch (error: any) {
-      p.state = 'done';
-      const errorIssue: Issue = {
-        file: 'N/A',
-        line: 'N/A',
-        severity: 'high',
-        message: `Execution Error: ${error.message}`
-      };
-      p.issues = [errorIssue];
-      
-      return { 
-        judge: p.displayName, 
-        file: p.judge.filePath, 
-        issues: [errorIssue] 
-      };
-    }
-  });
+): Promise<JudgeResult[]> {
+  return Promise.all(progressList.map((p) => runJudge(p, inputContext, engine)));
+}
 
-  const rawResults = await Promise.all(promises);
+async function runJudge(p: JudgeProgress, inputContext: EvaluationContext, engine: SupportedEngine): Promise<JudgeResult> {
+  p.state = 'running';
+  const startedAt = Date.now();
+  const outcome = await evaluateJudge(p.judge, inputContext, engine);
 
-  // Separate sorting step
-  for (const result of rawResults) {
-    result.issues.sort((a: Issue, b: Issue) => {
-      const scoreA = SEVERITY_SCORE[a.severity] || 0;
-      const scoreB = SEVERITY_SCORE[b.severity] || 0;
-      return scoreB - scoreA;
-    });
+  p.state = 'done';
+  p.status = outcome.status;
+  p.issues = outcome.issues;
+  p.error = outcome.error;
+
+  return {
+    judgeId: p.judge.id,
+    displayName: p.displayName,
+    file: p.judge.filePath,
+    status: outcome.status,
+    issues: outcome.issues,
+    durationMs: Date.now() - startedAt,
+    error: outcome.error
+  };
+}
+
+async function evaluateJudge(judge: Judge, inputContext: EvaluationContext, engine: SupportedEngine): Promise<JudgeOutcome> {
+  try {
+    const prompt = constructPrompt(judge, inputContext);
+    const timeoutMs = (judge.timeout_seconds || 30) * 1000;
+    const issues = await executeLLM(prompt, engine, timeoutMs);
+    return { status: 'ok', issues: sortBySeverity(issues) };
+  } catch (error: any) {
+    const status = error instanceof TimeoutError ? 'timeout' : 'error';
+    return { status, issues: [], error: error.message };
   }
+}
 
-  return rawResults;
+function sortBySeverity(issues: Issue[]): Issue[] {
+  return [...issues].sort((a, b) => (SEVERITY_SCORE[b.severity] || 0) - (SEVERITY_SCORE[a.severity] || 0));
 }

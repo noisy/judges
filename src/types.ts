@@ -21,3 +21,15 @@ export interface Issue {
   rule_id?: string;
   confidence?: 'high' | 'medium' | 'low';
 }
+
+export type JudgeStatus = 'ok' | 'error' | 'timeout';
+
+export interface JudgeResult {
+  judgeId: string;
+  displayName: string;
+  file: string;
+  status: JudgeStatus;
+  issues: Issue[];
+  durationMs: number;
+  error?: string;
+}

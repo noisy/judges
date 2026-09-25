@@ -4,9 +4,10 @@ import { extractDiff } from './diff.js';
 import { resolvePaths, readContents } from './files.js';
 import { discoverJudges, Judge } from './judges.js';
 import { ProgressRenderer, JudgeProgress } from './ui.js';
-import { EvaluationContext } from './types.js';
+import { EvaluationContext, JudgeResult } from './types.js';
 import { runJudgesParallel } from './runner.js';
-import { formatIssuesList } from './format.js';
+import { formatIssuesList, formatJudgeFailure } from './format.js';
+import { shouldBlock } from './gate.js';
 import colors from 'picocolors';
 import { createRequire } from 'module';
 
@@ -95,28 +96,9 @@ async function main() {
     console.log(JSON.stringify(results, null, 2));
   }
 
-  let maxSeverityNumeric = 0;
-  const severityMap: Record<string, number> = { low: 1, medium: 2, high: 3 };
-
-  for (const progress of results) {
-    if (progress.issues) {
-      for (const issue of progress.issues) {
-        if (issue.severity) {
-          const score = severityMap[issue.severity.toLowerCase()] || 0;
-          if (score > maxSeverityNumeric) {
-            maxSeverityNumeric = score;
-          }
-        }
-      }
-    }
-  }
-
-  if (config.failOn) {
-    const threshold = severityMap[config.failOn] || 0;
-    if (threshold > 0 && maxSeverityNumeric >= threshold) {
-      console.log(colors.red(`\n❌ Execution blocked: Issues of severity '${config.failOn}' or higher were found.`));
-      process.exit(1);
-    }
+  if (shouldBlock(results, config.failOn)) {
+    console.log(colors.red(`\n❌ Execution blocked: Issues of severity '${config.failOn}' or higher were found.`));
+    process.exit(1);
   }
 }
 
@@ -146,7 +128,7 @@ function resolveInputContext(config: AppConfig): EvaluationContext {
   return extractDiff('head');
 }
 
-async function orchestrateEvaluation(judges: Judge[], inputContext: EvaluationContext, config: AppConfig): Promise<any[]> {
+async function orchestrateEvaluation(judges: Judge[], inputContext: EvaluationContext, config: AppConfig): Promise<JudgeResult[]> {
   const progressList: JudgeProgress[] = judges.map((judge) => ({ 
     judge, 
     state: 'pending', 
@@ -173,7 +155,9 @@ function printHumanReadableResults(progressList: JudgeProgress[], config: AppCon
   if (config.visibleIssueLimit > 0) {
     console.log('\n--- Evaluation Details ---\n');
     for (const progress of progressList) {
-      if (progress.issues && progress.issues.length > 0) {
+      if (progress.error) {
+         console.log(formatJudgeFailure(progress.displayName, progress.error));
+      } else if (progress.issues && progress.issues.length > 0) {
          const issuesToShow = progress.issues.slice(0, config.visibleIssueLimit);
          console.log(formatIssuesList(progress.displayName, issuesToShow, progress.issues.length));
       }

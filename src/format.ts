@@ -38,3 +38,8 @@ export function formatIssuesList(judgeName: string, issues: Issue[], totalIssues
 
   return output;
 }
+
+export function formatJudgeFailure(judgeName: string, error: string): string {
+  const indentedError = error.split('\n').map(l => `      ${l}`).join('\n');
+  return `${pc.bold(pc.yellow('⚠'))} ${pc.bold(judgeName)} did not run:\n\n${indentedError}\n`;
+}
