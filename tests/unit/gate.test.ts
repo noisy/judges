@@ -31,6 +31,10 @@ describe('shouldBlock', () => {
     expect(shouldBlock([result('error'), result('timeout')], 'low')).toBe(false);
   });
 
+  it('does not block on skipped judges', () => {
+    expect(shouldBlock([result('skipped')], 'low')).toBe(false);
+  });
+
   it('ignores issues attached to non-ok results', () => {
     expect(shouldBlock([result('error', ['high'])], 'high')).toBe(false);
   });

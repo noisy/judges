@@ -36,3 +36,7 @@ export interface JudgeResult {
   error?: string;
   skipReason?: string;
 }
+
+export type JudgeEvent =
+  | { judgeId: string; state: 'running' }
+  | { judgeId: string; state: 'done'; result: JudgeResult };

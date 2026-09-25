@@ -34,6 +34,10 @@ export interface JudgeSources {
 
 const RULE_EXTENSION = '.md';
 
+export function displayName(judge: Judge): string {
+  return judge.name || judge.id;
+}
+
 export function discoverJudges(ruleDirs: string[] = []): Judge[] {
   const globalDir = path.join(os.homedir(), '.judge', 'judges');
   const localDir = path.join(process.cwd(), '.judge', 'judges');
