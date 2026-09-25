@@ -94,3 +94,5 @@ The `--fail-on` flag accepts:
 - `high`: Blocks commit if any `High` severity issue is found.
 - `medium` (or `med`): Blocks on `High` or `Medium` severity.
 - `low`: Blocks on virtually any issue found.
+
+Only issues from judges that actually ran count. A judge that errors or times out (e.g. the engine CLI is missing or rate-limited) is reported with a `⚠` warning, but it never blocks the commit.
