@@ -121,6 +121,15 @@ describe('isCovered', () => {
     expect(isCovered(markers, 'r', 'src/a.ts', '10-12')).toBe(false);
   });
 
+  it('covers the marker comment line and blank lines up to the code it marks', () => {
+    const marker = lineMarker(12, { markerLine: 10 });
+
+    expect(isCovered([marker], 'r', 'src/a.ts', 10)).toBe(true);
+    expect(isCovered([marker], 'r', 'src/a.ts', '10-12')).toBe(true);
+    expect(isCovered([marker], 'r', 'src/a.ts', 9)).toBe(false);
+    expect(isCovered([marker], 'r', 'src/a.ts', 13)).toBe(false);
+  });
+
   it('does not cover N/A with a line-level marker', () => {
     expect(isCovered([lineMarker(10)], 'r', 'src/a.ts', 'N/A')).toBe(false);
   });

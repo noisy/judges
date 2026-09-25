@@ -31,15 +31,15 @@ export function findMarkers(file: string, content: string): Marker[] {
 }
 
 // A range is covered only if every line in it is, so a finding that spans unmarked code is kept.
+// A line marker covers its own comment line too: models often report the line above the code.
 export function isCovered(markers: Marker[], ruleId: string, file: string, line: string | number): boolean {
   const relevant = accountedFor(markers, ruleId).filter((marker) => samePath(marker.file, file));
   if (relevant.some((marker) => marker.scope === 'file')) return true;
 
   const range = parseLineRange(line);
   if (!range) return false;
-  const coveredLines = new Set(relevant.map((marker) => (marker.scope as { line: number }).line));
   for (let n = range.from; n <= range.to; n++) {
-    if (!coveredLines.has(n)) return false;
+    if (!relevant.some((marker) => coversLine(marker, n))) return false;
   }
   return true;
 }
@@ -91,6 +91,10 @@ function nextCodeLine(lines: string[], parsed: Array<ParsedMarker | null>, marke
   let index = markerIndex + 1;
   while (index < lines.length && (parsed[index] || lines[index].trim() === '')) index++;
   return index + 1;
+}
+
+function coversLine(marker: Marker, line: number): boolean {
+  return marker.scope !== 'file' && line >= marker.markerLine && line <= marker.scope.line;
 }
 
 function samePath(a: string, b: string): boolean {
