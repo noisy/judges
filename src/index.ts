@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 import { parseArgs, AppConfig } from './config.js';
 import { extractDiff } from './diff.js';
-import { resolvePaths, readContents } from './files.js';
+import { resolvePaths, readContents, repoRoot } from './files.js';
 import { discoverJudges, selectJudges, Judge } from './judges.js';
 import { ProgressRenderer, issueSummaryLine } from './ui.js';
 import { EvaluationContext, JudgeResult } from './types.js';
 import { runPlan } from './runner.js';
 import { buildPlan } from './plan.js';
 import { auditMarkers } from './marker-audit.js';
+import { findMarkersInFiles } from './markers.js';
+import { groupByRule, formatInventory } from './inventory.js';
 import { formatIssuesList, formatJudgeFailure } from './format.js';
 import { shouldBlock } from './gate.js';
 import colors from 'picocolors';
@@ -29,6 +31,11 @@ async function main() {
 
   if (config.help) {
     printHelp();
+    return;
+  }
+
+  if (config.command === 'markers') {
+    printMarkerInventory(config);
     return;
   }
 
@@ -121,6 +128,18 @@ function loadJudgesOrExit(config: AppConfig): { loaded: Judge[]; selected: Judge
   }
 }
 
+// Lists markers in the given paths, or in the whole repository by default.
+function printMarkerInventory(config: AppConfig): void {
+  try {
+    const paths = config.paths.length > 0 ? config.paths : [repoRoot()];
+    const groups = groupByRule(findMarkersInFiles(readContents(resolvePaths(paths)).files));
+    console.log(config.json ? JSON.stringify(groups, null, 2) : formatInventory(groups));
+  } catch (error: any) {
+    console.error(colors.red(`❌ Error: ${error.message}`));
+    process.exit(1);
+  }
+}
+
 function describeSettings(judge: Judge): string {
   if (judge.format === 'rule') {
     return `${judge.severity} · ${judge.check} · ${judge.timeout_seconds}s`;
@@ -192,7 +211,8 @@ function printHumanReadableResults(results: JudgeResult[], config: AppConfig): v
 
 function printHelp(): void {
   console.log(`
-Usage: judge [options]
+Usage: judge [options] [paths...]
+       judge markers [paths...] [--json]   List rule-ignore / rule-todo markers, grouped by rule
 
 Options:
   --file, -f   Evaluate a specific file or files instead of git diff

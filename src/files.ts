@@ -6,7 +6,7 @@ import { EvaluationContext } from './types.js';
 export const MAX_FILES = 100;
 export const MAX_BYTES = 1024 * 1024; // 1 MB
 const IGNORED_DIRS = new Set([
-  'node_modules', '.git', 'dist', '.judge', 
+  'node_modules', '.git', 'dist', '.judge', '.worktree',
   '__pycache__', '.venv', 'venv', 'env', 'coverage'
 ]);
 
