@@ -1,17 +1,18 @@
 import logUpdate from 'log-update';
 import colors from 'picocolors';
-import { Judge } from './judges.js';
-import { Issue, JudgeStatus } from './types.js';
+import { Judge, displayName } from './judges.js';
+import { Issue, JudgeEvent, JudgeStatus } from './types.js';
 
-export type JudgeState = 'pending' | 'running' | 'done' | 'error';
+export type JudgeState = 'pending' | 'running' | 'done';
 
-export interface JudgeProgress {
+interface JudgeProgress {
   displayName: string;
   judge: Judge;
   state: JudgeState;
   issues?: Issue[];
   status?: JudgeStatus;
   error?: string;
+  skipReason?: string;
 }
 
 export class ProgressRenderer {
@@ -20,7 +21,24 @@ export class ProgressRenderer {
   private frameIdx = 0;
   private readonly uiRefreshIntervalMs = 80;
 
-  constructor(private readonly progressList: JudgeProgress[]) {}
+  private readonly progressList: JudgeProgress[];
+
+  constructor(judges: Judge[]) {
+    this.progressList = judges.map((judge) => ({ judge, state: 'pending', displayName: displayName(judge) }));
+  }
+
+  public update(event: JudgeEvent): void {
+    const p = this.progressList.find((progress) => progress.judge.id === event.judgeId);
+    if (!p) return;
+
+    p.state = event.state;
+    if (event.state === 'done') {
+      p.status = event.result.status;
+      p.issues = event.result.issues;
+      p.error = event.result.error;
+      p.skipReason = event.result.skipReason;
+    }
+  }
 
   public start(): void {
     console.log(colors.bold("\n--- Starting Judges Evaluation ---\n"));
@@ -46,6 +64,8 @@ export class ProgressRenderer {
         output += `  ${colors.gray('○')} ${p.displayName}\n`;
       } else if (p.state === 'running') {
         output += `  ${colors.yellow(this.frames[this.frameIdx])} ${colors.cyan(p.displayName)} evaluating...\n`;
+      } else if (p.state === 'done' && p.status === 'skipped') {
+         output += `  ${colors.dim(`○ ${p.displayName}: skipped (${p.skipReason})`)}\n`;
       } else if (p.state === 'done' && p.status === 'timeout') {
          output += `  ${colors.yellow('⚠')} ${colors.bold(p.displayName)}: timed out after ${p.judge.timeout_seconds}s\n`;
       } else if (p.state === 'done' && p.status === 'error') {

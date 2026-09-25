@@ -22,7 +22,7 @@ export interface Issue {
   confidence?: 'high' | 'medium' | 'low';
 }
 
-export type JudgeStatus = 'ok' | 'error' | 'timeout';
+export type JudgeStatus = 'ok' | 'error' | 'timeout' | 'skipped';
 
 export interface JudgeResult {
   judgeId: string;
@@ -34,4 +34,9 @@ export interface JudgeResult {
   costUsd?: number;
   turns?: number;
   error?: string;
+  skipReason?: string;
 }
+
+export type JudgeEvent =
+  | { judgeId: string; state: 'running' }
+  | { judgeId: string; state: 'done'; result: JudgeResult };

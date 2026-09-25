@@ -34,6 +34,10 @@ export interface JudgeSources {
 
 const RULE_EXTENSION = '.md';
 
+export function displayName(judge: Judge): string {
+  return judge.name || judge.id;
+}
+
 export function discoverJudges(ruleDirs: string[] = []): Judge[] {
   const globalDir = path.join(os.homedir(), '.judge', 'judges');
   const localDir = path.join(process.cwd(), '.judge', 'judges');
@@ -47,6 +51,18 @@ export function loadJudges(sources: JudgeSources): Judge[] {
     ...sources.ruleDirs.flatMap(findRulesInDir),
   ];
   return mergeById(judges);
+}
+
+// Keeps only the judges named by --only; no names means all of them.
+export function selectJudges(judges: Judge[], ids: string[]): Judge[] {
+  if (ids.length === 0) return judges;
+
+  const knownIds = new Set(judges.map(judge => judge.id));
+  const unknownIds = ids.filter(id => !knownIds.has(id));
+  if (unknownIds.length > 0) {
+    throw new Error(`Unknown judge or rule id: ${unknownIds.join(', ')}`);
+  }
+  return judges.filter(judge => ids.includes(judge.id));
 }
 
 function findJudgeMdsInDir(baseDir: string): Judge[] {

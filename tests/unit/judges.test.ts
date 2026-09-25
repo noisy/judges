@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadJudges } from '../../src/judges.js';
+import { loadJudges, selectJudges, Judge } from '../../src/judges.js';
 
 let root: string;
 
@@ -108,5 +108,21 @@ describe('loadJudges', () => {
     const [rule] = loadJudges({ legacyDirs: [], ruleDirs: [rulesDir] });
 
     expect(rule).toMatchObject({ isValid: true, check: 'deterministic', command: 'npm run lint', instructions: '' });
+  });
+});
+
+describe('selectJudges', () => {
+  const judges = [{ id: 'a' }, { id: 'b' }, { id: 'c' }] as Judge[];
+
+  it('keeps every judge when no ids are given', () => {
+    expect(selectJudges(judges, [])).toEqual(judges);
+  });
+
+  it('keeps only the named judges', () => {
+    expect(selectJudges(judges, ['c', 'a']).map(j => j.id)).toEqual(['a', 'c']);
+  });
+
+  it('throws naming every unknown id', () => {
+    expect(() => selectJudges(judges, ['a', 'x', 'y'])).toThrow('Unknown judge or rule id: x, y');
   });
 });

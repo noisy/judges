@@ -23,6 +23,12 @@ describe('CLI Configuration Parsing', () => {
     expect(args.visibleIssueLimit).toBe(0); // --short overrides limit to 0
   });
 
+  it('should collect repeated --only ids', () => {
+    expect(parseArgs([]).only).toEqual([]);
+    expect(parseArgs(['--only', 'a']).only).toEqual(['a']);
+    expect(parseArgs(['--only', 'a', '--only', 'b']).only).toEqual(['a', 'b']);
+  });
+
   it('should parse the --top option', () => {
     const args = parseArgs(['--top', '5']);
     expect(args.visibleIssueLimit).toBe(5);

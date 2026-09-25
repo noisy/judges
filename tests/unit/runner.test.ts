@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { runJudgesParallel, buildEngineRequest } from '../../src/runner.js';
+import { runPlan, buildEngineRequest, attributeToRule } from '../../src/runner.js';
 import { getEngine, Engine, TimeoutError } from '../../src/engines/index.js';
-import { JudgeProgress } from '../../src/ui.js';
 import { Judge } from '../../src/judges.js';
-import { EvaluationContext } from '../../src/types.js';
+import { PlanItem } from '../../src/plan.js';
+import { EvaluationContext, JudgeEvent } from '../../src/types.js';
 
 vi.mock('../../src/engines/index.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../src/engines/index.js')>();
@@ -14,19 +14,20 @@ const run = vi.fn<Engine['run']>();
 
 const inputContext: EvaluationContext = { type: 'files', files: [{ path: 'a.ts', content: 'x' }] };
 
-function makeProgress(): JudgeProgress {
-  const judge = {
-    id: 'srp',
-    name: 'SRP Validator',
-    instructions: 'Check SRP.',
-    timeout_seconds: 30,
-    tools: [],
-    filePath: '/judges/srp/JUDGE.md'
-  } as Judge;
-  return { judge, state: 'pending', displayName: judge.name };
+const judge = {
+  id: 'srp',
+  name: 'SRP Validator',
+  instructions: 'Check SRP.',
+  timeout_seconds: 30,
+  tools: [],
+  filePath: '/judges/srp/JUDGE.md'
+} as unknown as Judge;
+
+function planned(): PlanItem {
+  return { judge, context: inputContext };
 }
 
-describe('runJudgesParallel outcome mapping', () => {
+describe('runPlan outcome mapping', () => {
   beforeEach(() => {
     run.mockReset();
     vi.mocked(getEngine).mockReturnValue({ name: 'claude', isAvailable: () => true, run });
@@ -39,7 +40,7 @@ describe('runJudgesParallel outcome mapping', () => {
     ];
     run.mockResolvedValue({ rawOutput: JSON.stringify(issues), costUsd: 0.01, turns: 1, durationMs: 5 });
 
-    const [result] = await runJudgesParallel([makeProgress()], inputContext, 'claude');
+    const [result] = await runPlan([planned()], 'claude');
 
     expect(result.status).toBe('ok');
     expect(result.judgeId).toBe('srp');
@@ -55,7 +56,7 @@ describe('runJudgesParallel outcome mapping', () => {
   it('runs the engine with the request built from the judge', async () => {
     run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
 
-    await runJudgesParallel([makeProgress()], inputContext, 'claude');
+    await runPlan([planned()], 'claude');
 
     expect(getEngine).toHaveBeenCalledWith('claude');
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 30000, tools: [] }));
@@ -64,7 +65,7 @@ describe('runJudgesParallel outcome mapping', () => {
   it('maps unparseable engine output to status error', async () => {
     run.mockResolvedValue({ rawOutput: 'not json', durationMs: 5 });
 
-    const [result] = await runJudgesParallel([makeProgress()], inputContext, 'claude');
+    const [result] = await runPlan([planned()], 'claude');
 
     expect(result.status).toBe('error');
     expect(result.error).toContain('Failed to parse LLM output');
@@ -72,27 +73,65 @@ describe('runJudgesParallel outcome mapping', () => {
 
   it('maps a timeout to status timeout without issues', async () => {
     run.mockRejectedValue(new TimeoutError('claude CLI timed out after 30 seconds.'));
-    const progress = makeProgress();
 
-    const [result] = await runJudgesParallel([progress], inputContext, 'claude');
+    const [result] = await runPlan([planned()], 'claude');
 
     expect(result.status).toBe('timeout');
     expect(result.issues).toEqual([]);
     expect(result.error).toContain('timed out');
-    expect(progress.status).toBe('timeout');
   });
 
   it('maps a generic error to status error without issues', async () => {
     run.mockRejectedValue(new Error('claude CLI not found on PATH'));
-    const progress = makeProgress();
 
-    const [result] = await runJudgesParallel([progress], inputContext, 'claude');
+    const [result] = await runPlan([planned()], 'claude');
 
     expect(result.status).toBe('error');
     expect(result.issues).toEqual([]);
     expect(result.error).toBe('claude CLI not found on PATH');
-    expect(progress.state).toBe('done');
-    expect(progress.error).toBe('claude CLI not found on PATH');
+  });
+});
+
+describe('runPlan progress and skips', () => {
+  beforeEach(() => {
+    run.mockReset();
+    vi.mocked(getEngine).mockReturnValue({ name: 'claude', isAvailable: () => true, run });
+  });
+
+  it('emits running then done with the result for an executed judge', async () => {
+    run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
+    const events: JudgeEvent[] = [];
+
+    const [result] = await runPlan([planned()], 'claude', (event) => events.push(event));
+
+    expect(events).toEqual([
+      { judgeId: 'srp', state: 'running' },
+      { judgeId: 'srp', state: 'done', result }
+    ]);
+  });
+
+  it('returns a skipped result without calling the engine', async () => {
+    const events: JudgeEvent[] = [];
+
+    const [result] = await runPlan([{ judge, skip: 'no files in scope' }], 'claude', (event) => events.push(event));
+
+    expect(run).not.toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({
+      judgeId: 'srp',
+      status: 'skipped',
+      skipReason: 'no files in scope',
+      issues: []
+    }));
+    expect(events).toEqual([{ judgeId: 'srp', state: 'done', result }]);
+  });
+
+  it('keeps plan order when skipped and executed judges are mixed', async () => {
+    run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
+    const skippedJudge = { ...judge, id: 'deterministic-one' } as Judge;
+
+    const results = await runPlan([{ judge: skippedJudge, skip: 'x' }, planned()], 'claude');
+
+    expect(results.map((r) => [r.judgeId, r.status])).toEqual([['deterministic-one', 'skipped'], ['srp', 'ok']]);
   });
 });
 
@@ -121,5 +160,34 @@ describe('buildEngineRequest', () => {
       tools: ['Read'],
       maxTurns: 4
     });
+  });
+});
+
+describe('attributeToRule', () => {
+  const issues = [{ file: 'a.ts', line: 1, severity: 'medium' as const, message: 'msg', rule_id: 'made-up' }];
+
+  it('stamps rule issues with the rule id and the rule severity', () => {
+    const rule = { id: 'booleans-read-as-questions', format: 'rule', severity: 'low' } as Judge;
+
+    expect(attributeToRule(rule, issues)).toEqual([
+      { file: 'a.ts', line: 1, severity: 'low', message: 'msg', rule_id: 'booleans-read-as-questions' }
+    ]);
+  });
+
+  it('keeps the model severity for legacy JUDGE.md judges', () => {
+    const legacy = { id: 'srp', format: 'judge-md', severity: 'low' } as Judge;
+
+    expect(attributeToRule(legacy, issues)).toEqual(issues);
+  });
+
+  it('applies the rule severity to engine results', async () => {
+    const rule = { ...judge, format: 'rule', severity: 'high' } as Judge;
+    run.mockReset();
+    run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
+    vi.mocked(getEngine).mockReturnValue({ name: 'claude', isAvailable: () => true, run });
+
+    const [result] = await runPlan([{ judge: rule, context: inputContext }], 'claude');
+
+    expect(result.issues[0]).toEqual(expect.objectContaining({ severity: 'high', rule_id: 'srp' }));
   });
 });

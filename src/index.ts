@@ -2,10 +2,11 @@
 import { parseArgs, AppConfig } from './config.js';
 import { extractDiff } from './diff.js';
 import { resolvePaths, readContents } from './files.js';
-import { discoverJudges, Judge } from './judges.js';
-import { ProgressRenderer, JudgeProgress } from './ui.js';
+import { discoverJudges, selectJudges, Judge } from './judges.js';
+import { ProgressRenderer } from './ui.js';
 import { EvaluationContext, JudgeResult } from './types.js';
-import { runJudgesParallel } from './runner.js';
+import { runPlan } from './runner.js';
+import { buildPlan } from './plan.js';
 import { formatIssuesList, formatJudgeFailure } from './format.js';
 import { shouldBlock } from './gate.js';
 import colors from 'picocolors';
@@ -109,7 +110,8 @@ main().catch((error) => {
 
 function loadJudgesOrExit(config: AppConfig): Judge[] {
   try {
-    return discoverJudges(config.ruleDirs);
+    const judges = discoverJudges(config.ruleDirs);
+    return config.command === 'config' ? judges : selectJudges(judges, config.only);
   } catch (error: any) {
     console.error(colors.red(`❌ Error: ${error.message}`));
     process.exit(1);
@@ -145,37 +147,32 @@ function resolveInputContext(config: AppConfig): EvaluationContext {
 }
 
 async function orchestrateEvaluation(judges: Judge[], inputContext: EvaluationContext, config: AppConfig): Promise<JudgeResult[]> {
-  const progressList: JudgeProgress[] = judges.map((judge) => ({ 
-    judge, 
-    state: 'pending', 
-    displayName: judge.name || judge.id 
-  }));
-
-  const renderer = new ProgressRenderer(progressList);
+  const renderer = new ProgressRenderer(judges);
   
   if (!config.json) {
     renderer.start();
   }
 
-  const results = await runJudgesParallel(progressList, inputContext, config.engine);
+  const plan = buildPlan(judges, inputContext);
+  const results = await runPlan(plan, config.engine, (event) => renderer.update(event));
 
   if (!config.json) {
     renderer.stop();
-    printHumanReadableResults(progressList, config);
+    printHumanReadableResults(results, config);
   }
 
   return results;
 }
 
-function printHumanReadableResults(progressList: JudgeProgress[], config: AppConfig): void {
+function printHumanReadableResults(results: JudgeResult[], config: AppConfig): void {
   if (config.visibleIssueLimit > 0) {
     console.log('\n--- Evaluation Details ---\n');
-    for (const progress of progressList) {
-      if (progress.error) {
-         console.log(formatJudgeFailure(progress.displayName, progress.error));
-      } else if (progress.issues && progress.issues.length > 0) {
-         const issuesToShow = progress.issues.slice(0, config.visibleIssueLimit);
-         console.log(formatIssuesList(progress.displayName, issuesToShow, progress.issues.length));
+    for (const result of results) {
+      if (result.error) {
+         console.log(formatJudgeFailure(result.displayName, result.error));
+      } else if (result.issues.length > 0) {
+         const issuesToShow = result.issues.slice(0, config.visibleIssueLimit);
+         console.log(formatIssuesList(result.displayName, issuesToShow, result.issues.length));
       }
     }
   }
@@ -193,6 +190,7 @@ Options:
   --full       Show all issues found by judges
   --top <X>    Show the top X issues per judge (Default: 3)
   --rules <dir> Load flat rule files (<dir>/<id>.md); repeatable, overrides judges with the same id
+  --only <id>  Run only the named judge or rule; repeatable
   --help, -h   Show this help message
   --version, -v Show the version number
   `);
