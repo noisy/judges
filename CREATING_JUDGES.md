@@ -14,6 +14,26 @@ Judges can be defined at two levels:
 
 *(The `<judge-id>` is simply the name of the folder containing the `JUDGE.md` file).*
 
+## 📏 Rule Files
+
+A rule is a single Markdown file named after its id, kept in any directory (for example `rules/` in your repository) and loaded with `--rules`:
+
+```bash
+judge --staged --rules rules
+```
+
+`--rules` can be repeated. A rule overrides a judge with the same id. The frontmatter needs only `id` (matching the file name); `scope`, `severity`, `check`, `model`, `budget`, `tools` and `max_turns` are optional. See [docs/judge-format.md](docs/judge-format.md#rule-files) for every field.
+
+```markdown
+---
+id: booleans-read-as-questions
+severity: low
+budget: 30s, $0.05
+---
+Intent: a boolean name reads as a yes/no question, so a condition reads as a sentence.
+Rule: every boolean is named as a question, starting with `is`, `has`, `should`, `can`, `was` or `needs`.
+```
+
 ## ⚙️ Supported Frontmatter Options
 
 `judge-cli` requires YAML Frontmatter at the very top of your `JUDGE.md` file to configure the UI and metadata for the Judge. The Frontmatter is enclosed between triple dashes (`---`).
