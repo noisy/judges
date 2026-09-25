@@ -1,12 +1,12 @@
 import os from 'os';
 import { describe, it, expect } from 'vitest';
-import { buildClaudeArgs, claudeWorkingDir, explainClaudeFailure, interpretClaudeOutput } from '../../src/engines/claude.js';
+import { buildClaudeArgs, claudeWorkingDir, explainClaudeFailure, interpretClaudeOutput, readAccessArgs } from '../../src/engines/claude.js';
 import { buildCodexArgs, codexEngine } from '../../src/engines/codex.js';
 import { buildGeminiArgs, geminiEngine } from '../../src/engines/gemini.js';
 import { resolveModel } from '../../src/engines/models.js';
 import { EngineRequest } from '../../src/engines/types.js';
 
-const baseRequest: EngineRequest = { prompt: 'review this', mode: 'one-shot', timeoutMs: 30000, tools: [] };
+const baseRequest: EngineRequest = { prompt: 'review this', mode: 'one-shot', timeoutMs: 30000, tools: [], allowRead: [] };
 const agentRequest: EngineRequest = { ...baseRequest, mode: 'agent', tools: ['Read', 'Grep', 'Glob'], cwd: '/repo' };
 
 function flagValue(args: string[], flag: string): string | undefined {
@@ -70,6 +70,37 @@ describe('buildClaudeArgs', () => {
     expect(flagValue(args, '--tools')).toBe('Read,Grep');
     expect(flagValue(args, '--max-budget-usd')).toBe('0.25');
     expect(flagValue(args, '--max-turns')).toBe('5');
+  });
+});
+
+describe('readAccessArgs', () => {
+  const secretDenies = ['Read(//**/.env*)', 'Read(//**/.ssh/**)', 'Read(//**/.aws/**)', 'Read(//**/.claude*/**)',
+    'Read(//**/*.pem)', 'Read(//**/*key*.json)'];
+  const settingsOf = (args: string[]) => JSON.parse(flagValue(args, '--settings')!).permissions;
+
+  it('keeps a judge to the repo and still denies secrets when nothing is allowed', () => {
+    const args = readAccessArgs([], '/work/orders');
+
+    expect(args).not.toContain('--add-dir');
+    expect(settingsOf(args)).toEqual({ allow: [], deny: secretDenies });
+  });
+
+  it('adds each allowed directory, resolved against the repo root, with a matching allow rule', () => {
+    const args = readAccessArgs(['../billing-service/**', '../shared-contracts', '/srv/specs/**', '~/contracts/**'], '/work/orders', '/home/dev');
+
+    expect(args.filter((_, i) => args[i - 1] === '--add-dir'))
+      .toEqual(['/work/billing-service', '/work/shared-contracts', '/srv/specs', '/home/dev/contracts']);
+    expect(settingsOf(args)).toEqual({
+      allow: ['Read(//work/billing-service/**)', 'Read(//work/shared-contracts/**)', 'Read(//srv/specs/**)', 'Read(//home/dev/contracts/**)'],
+      deny: secretDenies
+    });
+  });
+
+  it('is part of every claude run', () => {
+    const args = buildClaudeArgs({ ...agentRequest, allowRead: ['../billing-service/**'] });
+
+    expect(flagValue(args, '--add-dir')).toBe('/billing-service');
+    expect(settingsOf(args).deny).toEqual(secretDenies);
   });
 });
 
@@ -181,6 +212,17 @@ describe('interpretClaudeOutput for agent streams', () => {
         { tool: 'Read', target: '/tmp/outside.txt', denied: true },
       ]
     });
+  });
+
+  it('shows the full path for reads outside the repo, so a use of allow_read is visible', () => {
+    const stdout = stream(toolUse('t1', 'Read', { file_path: '../billing-service/api.py' }),
+      toolUse('t2', 'Grep', { pattern: 'def charge', path: '/billing-service' }),
+      JSON.stringify({ type: 'result', is_error: false, result: '[]' }));
+
+    expect(interpretClaudeOutput(stdout, agentRequest).examined).toEqual([
+      { tool: 'Read', target: '/billing-service/api.py' },
+      { tool: 'Grep', target: 'def charge in /billing-service' },
+    ]);
   });
 
   it('records an empty list for an agent that used no tools', () => {

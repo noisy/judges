@@ -205,12 +205,13 @@ describe('buildEngineRequest', () => {
       timeoutMs: 45000,
       maxBudgetUsd: undefined,
       tools: [],
+      allowRead: [],
       maxTurns: undefined
     });
   });
 
   it('maps the judge engine options onto the request', () => {
-    const judge = { mode: 'agent', timeout_seconds: 60, model: 'small', tools: ['Read'], max_budget_usd: 0.5, max_turns: 4 } as Judge;
+    const judge = { mode: 'agent', timeout_seconds: 60, model: 'small', tools: ['Read'], allow_read: ['../billing/**'], max_budget_usd: 0.5, max_turns: 4 } as Judge;
 
     expect(buildEngineRequest(judge, 'prompt', '/repo')).toEqual({
       prompt: 'prompt',
@@ -220,6 +221,7 @@ describe('buildEngineRequest', () => {
       timeoutMs: 60000,
       maxBudgetUsd: 0.5,
       tools: ['Read'],
+      allowRead: ['../billing/**'],
       maxTurns: 4
     });
   });

@@ -1,3 +1,4 @@
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { EngineRequest } from './types.js';
@@ -21,6 +22,11 @@ const SANDBOX_ARGS = [
   '--disallowedTools', 'Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch',
 ];
 
+// Hard floor for secrets, denied on every run even inside the repo or an `allow_read` directory.
+// `//` anchors a permission rule at the filesystem root, so `//**/x` matches x anywhere
+// (a bare `**/x` would match only under the working directory). Deny rules also cover Grep and Glob.
+export const SECRET_DENY_PATTERNS = ['**/.env*', '**/.ssh/**', '**/.aws/**', '**/.claude*/**', '**/*.pem', '**/*key*.json'];
+
 // Agent judges stream events so every tool call can be recorded; one-shot judges need only the result.
 const AGENT_OUTPUT_ARGS = ['--output-format', 'stream-json', '--verbose'];
 const ONE_SHOT_OUTPUT_ARGS = ['--output-format', 'json'];
@@ -29,12 +35,44 @@ type CliEvent = Record<string, any>;
 
 export function buildClaudeArgs(req: EngineRequest): string[] {
   const outputArgs = req.mode === 'agent' ? AGENT_OUTPUT_ARGS : ONE_SHOT_OUTPUT_ARGS;
-  const args = ['-p', req.prompt, ...outputArgs, '--tools', req.tools.join(','), ...MINIMAL_CONFIG_ARGS, ...SANDBOX_ARGS];
+  const args = [
+    '-p', req.prompt, ...outputArgs, '--tools', req.tools.join(','), ...MINIMAL_CONFIG_ARGS, ...SANDBOX_ARGS,
+    ...readAccessArgs(req.allowRead, req.cwd ?? process.cwd())
+  ];
   const model = resolveModel('claude', req.model);
   if (model) args.push('--model', model);
   if (req.maxBudgetUsd !== undefined) args.push('--max-budget-usd', String(req.maxBudgetUsd));
   if (req.maxTurns !== undefined) args.push('--max-turns', String(req.maxTurns));
   return args;
+}
+
+// `allow_read` onto the sandbox: --restricted confines the file tools to the working directories,
+// so each allowed directory joins them through --add-dir, which grants the whole directory
+// (the validator accepts only whole directories for that reason). Matching allow rules state the
+// same grant to the permission layer. Everything else outside the repo stays denied, and the
+// secret deny rules win over both.
+export function readAccessArgs(allowRead: string[], root: string, home: string = os.homedir()): string[] {
+  const dirs = allowRead.map((pattern) => resolveAllowedDir(pattern, root, home));
+  const permissions = {
+    allow: dirs.map((dir) => `Read(/${dir}/**)`),
+    deny: SECRET_DENY_PATTERNS.map((pattern) => `Read(//${pattern})`)
+  };
+  return [...dirs.flatMap((dir) => ['--add-dir', dir]), '--settings', JSON.stringify({ permissions })];
+}
+
+// "../billing-service/**" -> "/work/billing-service".
+function resolveAllowedDir(pattern: string, root: string, home: string): string {
+  const dir = pattern.replace(/\/\*\*$/, '');
+  return realPath(dir.startsWith('~/') ? path.join(home, dir.slice(2)) : path.resolve(root, dir));
+}
+
+// The CLI compares real paths (/tmp is /private/tmp on macOS), so symlinks are resolved where they exist.
+function realPath(target: string): string {
+  try {
+    return fs.realpathSync(target);
+  } catch {
+    return target;
+  }
 }
 
 // One-shot judges read nothing from disk, so a neutral directory keeps repo CLAUDE.md files out.
@@ -118,10 +156,12 @@ function describeTarget(input: CliEvent, cwd?: string): string {
   return shownPath ?? JSON.stringify(input);
 }
 
+// Inside the repo relative to its root; outside it the full path, so a use of `allow_read` shows.
 function relativeToRoot(target: string, cwd?: string): string {
-  if (!cwd || !path.isAbsolute(target)) return target;
-  const relative = path.relative(cwd, target);
-  return relative.startsWith('..') ? target : relative || '.';
+  if (!cwd) return target;
+  const absolute = realPath(path.resolve(cwd, target));
+  const relative = path.relative(realPath(cwd), absolute);
+  return relative.startsWith('..') ? absolute : relative || '.';
 }
 
 function asNumber(value: unknown): number | undefined {

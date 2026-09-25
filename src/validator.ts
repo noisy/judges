@@ -21,6 +21,10 @@ const DEFAULT_AGENT_MAX_TURNS = 8;
 // Judges are read-only by construction: no tool that writes, runs code or reaches the network.
 export const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob', 'LS'] as const;
 const SECONDS_PER_UNIT: Record<string, number> = { s: 1, m: 60 };
+// A directory outside the repo, whole: `../billing-service`, `../billing-service/**`, `/abs/dir/**`, `~/dir/**`.
+// The sandbox grants whole directories, so a narrower glob would promise less than it grants.
+const ALLOW_READ_PATTERN = /^[^*?[\]{}]+?(\/\*\*)?$/;
+const ALLOW_READ_ERROR = '`allow_read` entries must be a directory, optionally ending in /** (relative to the repo root, absolute, or ~/)';
 const BUDGET_FORMAT_ERROR = '`budget` must look like "30s, $0.10" (time in s or m, cost in $, either part optional)';
 
 const settingsFields = {
@@ -50,6 +54,8 @@ const settingsFields = {
   tools: z.array(z.enum(READ_ONLY_TOOLS, {
     error: `\`tools\` entries must be read-only tools: ${READ_ONLY_TOOLS.join(', ')}`,
   })).min(1, '`tools` cannot be empty').optional(),
+
+  allow_read: z.array(z.string().regex(ALLOW_READ_PATTERN, ALLOW_READ_ERROR)).optional(),
 
   max_turns: z.number().int('`max_turns` must be an integer')
     .positive('`max_turns` must be positive')
@@ -125,6 +131,7 @@ export function parseBudget(value: string): Budget | null {
 interface SettingsInput {
   mode: 'one-shot' | 'agent';
   tools?: string[];
+  allow_read?: string[];
   max_turns?: number;
   timeout_seconds?: number;
   budget?: Budget;
@@ -139,6 +146,9 @@ function checkSettingsConsistency(data: SettingsInput, ctx: z.RefinementCtx): vo
   if (data.tools !== undefined && data.mode !== 'agent') {
     ctx.addIssue({ code: 'custom', path: ['tools'], message: '`tools` is only allowed with `mode: agent`' });
   }
+  if (data.allow_read !== undefined && data.mode !== 'agent') {
+    ctx.addIssue({ code: 'custom', path: ['allow_read'], message: '`allow_read` is only allowed with `mode: agent`' });
+  }
   if (data.command !== undefined && data.check !== 'deterministic') {
     ctx.addIssue({ code: 'custom', path: ['command'], message: '`command` is only allowed with `check: deterministic`' });
   }
@@ -150,6 +160,7 @@ function resolveDefaults<T extends SettingsInput>({ budget, ...rest }: T) {
   return {
     ...rest,
     tools: rest.tools ?? (isAgent ? DEFAULT_AGENT_TOOLS : []),
+    allow_read: rest.allow_read ?? [],
     max_turns: rest.max_turns ?? (isAgent ? DEFAULT_AGENT_MAX_TURNS : undefined),
     timeout_seconds: rest.timeout_seconds ?? budget?.timeout_seconds
       ?? (isAgent ? DEFAULT_AGENT_TIMEOUT_SECONDS : DEFAULT_TIMEOUT_SECONDS),

@@ -87,6 +87,7 @@ export function buildEngineRequest(judge: Judge, prompt: string, cwd?: string): 
     timeoutMs: judge.timeout_seconds * 1000,
     maxBudgetUsd: judge.max_budget_usd,
     tools: judge.tools,
+    allowRead: judge.allow_read ?? [],
     maxTurns: judge.max_turns
   };
 }

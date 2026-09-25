@@ -125,7 +125,7 @@ describe('validateRule', () => {
     expect(result.valid).toBe(true);
     expect(result.data).toMatchObject({
       name: 'booleans', description: '', version: '', scope: ['**/*'], severity: 'medium',
-      check: 'judge', tools: [], timeout_seconds: 30, mode: 'one-shot',
+      check: 'judge', tools: [], allow_read: [], timeout_seconds: 30, mode: 'one-shot',
     });
   });
 
@@ -211,6 +211,28 @@ describe('mode and tools', () => {
     const result = validateRule({ id: 'r', mode: 'agent', tools: [] }, 'r');
     expect(result.valid).toBe(false);
     expect(result.errors[0]).toContain('`tools` cannot be empty');
+  });
+
+  it('lets an agent read nothing outside the repo by default', () => {
+    expect(validateRule({ id: 'r', mode: 'agent' }, 'r').data.allow_read).toEqual([]);
+  });
+
+  it.each(['../billing-service/**', '../shared-contracts', '/srv/specs/**', '~/contracts/**', '../a/b/'])(
+    'accepts the directory pattern %s', (pattern) => {
+      expect(validateRule({ id: 'r', mode: 'agent', allow_read: [pattern] }, 'r').valid).toBe(true);
+    });
+
+  it.each(['../billing/*.py', '../billing/**/api.py', '../{a,b}/**', '../billing/api?.py'])(
+    'rejects the narrower glob %s, since the sandbox grants whole directories', (pattern) => {
+      const result = validateRule({ id: 'r', mode: 'agent', allow_read: [pattern] }, 'r');
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('`allow_read` entries must be a directory');
+    });
+
+  it('rejects allow_read on a one-shot rule', () => {
+    const result = validateRule({ id: 'r', allow_read: ['../billing-service/**'] }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('error: `allow_read` is only allowed with `mode: agent`');
   });
 
   it('applies the same checks to JUDGE.md judges', () => {

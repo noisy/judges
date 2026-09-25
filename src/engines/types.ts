@@ -8,6 +8,7 @@ export interface EngineRequest {
   timeoutMs: number;
   maxBudgetUsd?: number;
   tools: string[];
+  allowRead: string[]; // allow_read patterns, resolved against cwd by the adapter
   maxTurns?: number;
 }
 
