@@ -1,13 +1,6 @@
-import { SupportedEngine } from './types.js';
+import { Issue, SupportedEngine } from './types.js';
 import { spawn } from 'child_process';
 import { spawnSync } from 'child_process';
-
-export interface Issue {
-  file: string;
-  line: string | number;
-  severity: 'low' | 'medium' | 'high';
-  message: string;
-}
 
 export const MOCK_DELAY_BASE_MS = 1000;
 export const MOCK_DELAY_RANGE_MS = 2000;

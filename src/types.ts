@@ -12,3 +12,12 @@ export interface EvaluationContext {
 }
 
 export type SupportedEngine = 'claude' | 'codex' | 'gemini';
+
+export interface Issue {
+  file: string;
+  line: string | number;
+  severity: 'low' | 'medium' | 'high';
+  message: string;
+  rule_id?: string;
+  confidence?: 'high' | 'medium' | 'low';
+}

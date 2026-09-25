@@ -1,7 +1,7 @@
 import logUpdate from 'log-update';
 import colors from 'picocolors';
 import { Judge } from './judges.js';
-import { Issue } from './llm.js';
+import { Issue } from './types.js';
 
 export type JudgeState = 'pending' | 'running' | 'done' | 'error';
 

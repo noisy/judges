@@ -1,8 +1,8 @@
-import { executeLLM, Issue, parseLLMOutput } from './llm.js';
+import { executeLLM } from './llm.js';
 import { constructPrompt } from './prompt.js';
 import { JudgeProgress } from './ui.js';
 import { SEVERITY_SCORE } from './config.js';
-import { EvaluationContext, SupportedEngine } from './types.js';
+import { EvaluationContext, Issue, SupportedEngine } from './types.js';
 
 export async function runJudgesParallel(
   progressList: JudgeProgress[],
