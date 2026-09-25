@@ -30,6 +30,7 @@ export interface JudgeResult {
   file: string;
   status: JudgeStatus;
   issues: Issue[];
+  suppressed?: number; // findings dropped because a marker covers them
   durationMs: number;
   costUsd?: number;
   turns?: number;

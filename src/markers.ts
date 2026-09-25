@@ -32,7 +32,7 @@ export function findMarkers(file: string, content: string): Marker[] {
 
 // A range is covered only if every line in it is, so a finding that spans unmarked code is kept.
 export function isCovered(markers: Marker[], ruleId: string, file: string, line: string | number): boolean {
-  const relevant = markers.filter((marker) => marker.ruleId === ruleId && samePath(marker.file, file) && hasReason(marker));
+  const relevant = accountedFor(markers, ruleId).filter((marker) => samePath(marker.file, file));
   if (relevant.some((marker) => marker.scope === 'file')) return true;
 
   const range = parseLineRange(line);
@@ -42,6 +42,15 @@ export function isCovered(markers: Marker[], ruleId: string, file: string, line:
     if (!coveredLines.has(n)) return false;
   }
   return true;
+}
+
+export function findMarkersInFiles(files: Array<{ path: string; content: string }>): Marker[] {
+  return files.flatMap((file) => findMarkers(file.path, file.content));
+}
+
+// What a judge is told and what its findings are filtered by: its own markers that carry a reason.
+export function accountedFor(markers: Marker[], ruleId: string): Marker[] {
+  return markers.filter((marker) => marker.ruleId === ruleId && hasReason(marker));
 }
 
 export function hasReason(marker: Marker): boolean {

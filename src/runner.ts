@@ -3,10 +3,11 @@ import { parseLLMOutput } from './llm.js';
 import { constructPrompt } from './prompt.js';
 import { Judge, displayName } from './judges.js';
 import { PlanItem } from './plan.js';
+import { Marker, isCovered } from './markers.js';
 import { SEVERITY_SCORE } from './config.js';
 import { EvaluationContext, Issue, JudgeEvent, JudgeResult, SupportedEngine } from './types.js';
 
-type JudgeOutcome = Pick<JudgeResult, 'status' | 'issues' | 'error' | 'costUsd' | 'turns'>;
+type JudgeOutcome = Pick<JudgeResult, 'status' | 'issues' | 'suppressed' | 'error' | 'costUsd' | 'turns'>;
 export type ProgressListener = (event: JudgeEvent) => void;
 
 export async function runPlan(
@@ -20,7 +21,7 @@ export async function runPlan(
 async function runPlanItem(item: PlanItem, engine: SupportedEngine, onProgress: ProgressListener): Promise<JudgeResult> {
   const result = 'skip' in item
     ? skippedResult(item.judge, item.skip)
-    : await runJudge(item.judge, item.context, engine, onProgress);
+    : await runJudge(item.judge, item.context, item.markers, engine, onProgress);
   onProgress({ judgeId: item.judge.id, state: 'done', result });
   return result;
 }
@@ -32,17 +33,19 @@ function skippedResult(judge: Judge, skipReason: string): JudgeResult {
 async function runJudge(
   judge: Judge,
   context: EvaluationContext,
+  markers: Marker[],
   engine: SupportedEngine,
   onProgress: ProgressListener
 ): Promise<JudgeResult> {
   onProgress({ judgeId: judge.id, state: 'running' });
   const startedAt = Date.now();
-  const outcome = await evaluateJudge(judge, context, engine);
+  const outcome = await evaluateJudge(judge, context, markers, engine);
 
   return {
     ...judgeIdentity(judge),
     status: outcome.status,
     issues: outcome.issues,
+    suppressed: outcome.suppressed,
     durationMs: Date.now() - startedAt,
     costUsd: outcome.costUsd,
     turns: outcome.turns,
@@ -54,12 +57,18 @@ function judgeIdentity(judge: Judge): Pick<JudgeResult, 'judgeId' | 'displayName
   return { judgeId: judge.id, displayName: displayName(judge), file: judge.filePath };
 }
 
-async function evaluateJudge(judge: Judge, context: EvaluationContext, engine: SupportedEngine): Promise<JudgeOutcome> {
+async function evaluateJudge(
+  judge: Judge,
+  context: EvaluationContext,
+  markers: Marker[],
+  engine: SupportedEngine
+): Promise<JudgeOutcome> {
   try {
-    const prompt = constructPrompt(judge, context);
+    const prompt = constructPrompt(judge, context, markers);
     const response = await getEngine(engine).run(buildEngineRequest(judge, prompt));
     const issues = attributeToRule(judge, parseLLMOutput(response.rawOutput));
-    return { status: 'ok', issues: sortBySeverity(issues), costUsd: response.costUsd, turns: response.turns };
+    const { kept, suppressed } = dropCovered(judge, issues, markers);
+    return { status: 'ok', issues: sortBySeverity(kept), suppressed, costUsd: response.costUsd, turns: response.turns };
   } catch (error: any) {
     const status = error instanceof TimeoutError ? 'timeout' : 'error';
     return { status, issues: [], error: error.message };
@@ -81,6 +90,12 @@ export function buildEngineRequest(judge: Judge, prompt: string): EngineRequest 
 export function attributeToRule(judge: Judge, issues: Issue[]): Issue[] {
   if (judge.format !== 'rule') return issues;
   return issues.map((issue) => ({ ...issue, rule_id: judge.id, severity: judge.severity }));
+}
+
+// The prompt asks the judge to skip marked places; this is the guarantee when it does not.
+export function dropCovered(judge: Judge, issues: Issue[], markers: Marker[]): { kept: Issue[]; suppressed: number } {
+  const kept = issues.filter((issue) => !isCovered(markers, judge.id, issue.file, issue.line));
+  return { kept, suppressed: issues.length - kept.length };
 }
 
 function sortBySeverity(issues: Issue[]): Issue[] {

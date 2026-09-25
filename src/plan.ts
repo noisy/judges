@@ -1,9 +1,10 @@
 import { Judge } from './judges.js';
 import { scopeContext } from './scope.js';
+import { Marker, accountedFor, findMarkersInFiles } from './markers.js';
 import { EvaluationContext } from './types.js';
 
 export type PlanItem =
-  | { judge: Judge; context: EvaluationContext }
+  | { judge: Judge; context: EvaluationContext; markers: Marker[] }
   | { judge: Judge; skip: string };
 
 export const SKIP_NO_FILES_IN_SCOPE = 'no files in scope';
@@ -21,5 +22,6 @@ function planJudge(judge: Judge, context: EvaluationContext): PlanItem {
   if (scoped.files.length === 0) {
     return { judge, skip: SKIP_NO_FILES_IN_SCOPE };
   }
-  return { judge, context: scoped };
+  const markers = accountedFor(findMarkersInFiles(scoped.files), judge.id);
+  return { judge, context: scoped, markers };
 }

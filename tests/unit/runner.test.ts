@@ -3,6 +3,7 @@ import { runPlan, buildEngineRequest, attributeToRule } from '../../src/runner.j
 import { getEngine, Engine, TimeoutError } from '../../src/engines/index.js';
 import { Judge } from '../../src/judges.js';
 import { PlanItem } from '../../src/plan.js';
+import { Marker } from '../../src/markers.js';
 import { EvaluationContext, JudgeEvent } from '../../src/types.js';
 
 vi.mock('../../src/engines/index.js', async (importOriginal) => {
@@ -23,8 +24,8 @@ const judge = {
   filePath: '/judges/srp/JUDGE.md'
 } as unknown as Judge;
 
-function planned(): PlanItem {
-  return { judge, context: inputContext };
+function planned(markers: Marker[] = []): PlanItem {
+  return { judge, context: inputContext, markers };
 }
 
 describe('runPlan outcome mapping', () => {
@@ -89,6 +90,46 @@ describe('runPlan outcome mapping', () => {
     expect(result.status).toBe('error');
     expect(result.issues).toEqual([]);
     expect(result.error).toBe('claude CLI not found on PATH');
+  });
+});
+
+describe('runPlan with markers', () => {
+  const marker: Marker = { kind: 'ignore', ruleId: 'srp', reason: 'external schema', file: 'a.ts', markerLine: 1, scope: { line: 2 } };
+
+  beforeEach(() => {
+    run.mockReset();
+    vi.mocked(getEngine).mockReturnValue({ name: 'claude', isAvailable: () => true, run });
+  });
+
+  it('drops findings on marked lines and counts them as suppressed', async () => {
+    const issues = [
+      { file: 'a.ts', line: 2, severity: 'high', message: 'marked' },
+      { file: 'a.ts', line: 3, severity: 'low', message: 'not marked' }
+    ];
+    run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
+
+    const [result] = await runPlan([planned([marker])], 'claude');
+
+    expect(result.issues.map((i) => i.message)).toEqual(['not marked']);
+    expect(result.suppressed).toBe(1);
+  });
+
+  it('reports zero suppressed when nothing is marked', async () => {
+    run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
+
+    const [result] = await runPlan([planned()], 'claude');
+
+    expect(result.suppressed).toBe(0);
+  });
+
+  it('tells the judge which places are accounted for', async () => {
+    run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
+
+    await runPlan([planned([marker])], 'claude');
+
+    const prompt = run.mock.calls[0][0].prompt;
+    expect(prompt).toContain('Markers (accounted for, do not report');
+    expect(prompt).toContain('- a.ts:2 (rule-ignore): external schema');
   });
 });
 
@@ -186,7 +227,7 @@ describe('attributeToRule', () => {
     run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
     vi.mocked(getEngine).mockReturnValue({ name: 'claude', isAvailable: () => true, run });
 
-    const [result] = await runPlan([{ judge: rule, context: inputContext }], 'claude');
+    const [result] = await runPlan([{ judge: rule, context: inputContext, markers: [] }], 'claude');
 
     expect(result.issues[0]).toEqual(expect.objectContaining({ severity: 'high', rule_id: 'srp' }));
   });
