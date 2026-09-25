@@ -15,6 +15,11 @@ export interface Budget {
 const semverRegex = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-zA-Z0-9-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-zA-Z0-9-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 
 const DEFAULT_TIMEOUT_SECONDS = 30;
+const DEFAULT_AGENT_TIMEOUT_SECONDS = 120;
+const DEFAULT_AGENT_TOOLS: string[] = ['Read', 'Grep', 'Glob'];
+const DEFAULT_AGENT_MAX_TURNS = 8;
+// Judges are read-only by construction: no tool that writes, runs code or reaches the network.
+export const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob', 'LS'] as const;
 const SECONDS_PER_UNIT: Record<string, number> = { s: 1, m: 60 };
 const BUDGET_FORMAT_ERROR = '`budget` must look like "30s, $0.10" (time in s or m, cost in $, either part optional)';
 
@@ -42,7 +47,9 @@ const settingsFields = {
 
   model: z.string().min(1, '`model` cannot be empty').optional(),
 
-  tools: z.array(z.string().min(1, '`tools` entries cannot be empty')).optional().default([]),
+  tools: z.array(z.enum(READ_ONLY_TOOLS, {
+    error: `\`tools\` entries must be read-only tools: ${READ_ONLY_TOOLS.join(', ')}`,
+  })).min(1, '`tools` cannot be empty').optional(),
 
   max_turns: z.number().int('`max_turns` must be an integer')
     .positive('`max_turns` must be positive')
@@ -59,7 +66,7 @@ const JudgeSchema = z.object({
   version: z.string().regex(semverRegex, '`version` must be a valid semver'),
 
   ...settingsFields,
-}).superRefine(checkSettingsConsistency).transform(resolveBudget);
+}).superRefine(checkSettingsConsistency).transform(resolveDefaults);
 
 const RuleSchema = z.object({
   id: z.string().min(1, '`id` cannot be empty'),
@@ -72,7 +79,7 @@ const RuleSchema = z.object({
 
   ...settingsFields,
 }).superRefine(checkSettingsConsistency)
-  .transform(resolveBudget)
+  .transform(resolveDefaults)
   .transform(rule => ({ ...rule, name: rule.name ?? rule.id }));
 
 export function validateJudge(data: any): ValidationResult {
@@ -90,7 +97,7 @@ export function validateRule(data: any, fileId: string): ValidationResult {
 
 // Settings an invalid judge falls back to, so it can still be listed and reported.
 export function defaultSettings() {
-  return resolveBudget(z.object(settingsFields).parse({}));
+  return resolveDefaults(z.object(settingsFields).parse({}));
 }
 
 // "30s, $0.10" -> { timeout_seconds: 30, max_budget_usd: 0.1 }; null when malformed.
@@ -116,6 +123,9 @@ export function parseBudget(value: string): Budget | null {
 }
 
 interface SettingsInput {
+  mode: 'one-shot' | 'agent';
+  tools?: string[];
+  max_turns?: number;
   timeout_seconds?: number;
   budget?: Budget;
   check: 'judge' | 'deterministic';
@@ -126,15 +136,23 @@ function checkSettingsConsistency(data: SettingsInput, ctx: z.RefinementCtx): vo
   if (data.timeout_seconds !== undefined && data.budget?.timeout_seconds !== undefined) {
     ctx.addIssue({ code: 'custom', path: ['budget'], message: '`budget` time and `timeout_seconds` cannot both be set' });
   }
+  if (data.tools !== undefined && data.mode !== 'agent') {
+    ctx.addIssue({ code: 'custom', path: ['tools'], message: '`tools` is only allowed with `mode: agent`' });
+  }
   if (data.command !== undefined && data.check !== 'deterministic') {
     ctx.addIssue({ code: 'custom', path: ['command'], message: '`command` is only allowed with `check: deterministic`' });
   }
 }
 
-function resolveBudget<T extends SettingsInput>({ budget, ...rest }: T) {
+// `mode` decides the defaults: one-shot judges get no tools, agents get read-only tools and a turn cap.
+function resolveDefaults<T extends SettingsInput>({ budget, ...rest }: T) {
+  const isAgent = rest.mode === 'agent';
   return {
     ...rest,
-    timeout_seconds: rest.timeout_seconds ?? budget?.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS,
+    tools: rest.tools ?? (isAgent ? DEFAULT_AGENT_TOOLS : []),
+    max_turns: rest.max_turns ?? (isAgent ? DEFAULT_AGENT_MAX_TURNS : undefined),
+    timeout_seconds: rest.timeout_seconds ?? budget?.timeout_seconds
+      ?? (isAgent ? DEFAULT_AGENT_TIMEOUT_SECONDS : DEFAULT_TIMEOUT_SECONDS),
     max_budget_usd: budget?.max_budget_usd,
   };
 }
@@ -152,13 +170,5 @@ function toValidationResult(parsed: z.ZodSafeParseResult<any>): ValidationResult
     return { valid: false, errors, warnings };
   }
 
-  const validData = parsed.data;
-
-  // Non-fatal warning for agent mode
-  if (validData.mode === 'agent') {
-    warnings.push('`mode`: agent mode not yet implemented, falling back to one-shot');
-    validData.mode = 'one-shot';
-  }
-
-  return { valid: true, errors: [], warnings, data: validData };
+  return { valid: true, errors: [], warnings, data: parsed.data };
 }
