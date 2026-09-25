@@ -31,5 +31,7 @@ export interface JudgeResult {
   status: JudgeStatus;
   issues: Issue[];
   durationMs: number;
+  costUsd?: number;
+  turns?: number;
   error?: string;
 }
