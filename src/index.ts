@@ -147,14 +147,20 @@ function describeSettings(judge: Judge): string {
   return `v${judge.version} · ${judge.mode} · ${judge.timeout_seconds}s`;
 }
 
+// The root is where agent judges explore and what file paths are shown relative to.
 function resolveInputContext(config: AppConfig): EvaluationContext {
+  const root = config.root ? path.resolve(config.root) : repoRoot();
+  return { ...readInput(config, root), root };
+}
+
+function readInput(config: AppConfig, root: string): EvaluationContext {
   if (config.paths.length > 0) {
     const paths = resolvePaths(config.paths);
-    return readContents(paths);
+    return readContents(paths, root);
   }
   if (config.file) {
     const paths = resolvePaths(config.file);
-    return readContents(paths);
+    return readContents(paths, root);
   }
   
   if (config.staged) {
@@ -222,6 +228,7 @@ Options:
   --top <X>    Show the top X issues per judge (Default: 3)
   --rules <dir> Load flat rule files (<dir>/<id>.md); repeatable, overrides judges with the same id
   --only <id>  Run only the named judge or rule; repeatable
+  --root <dir> Repository root agent judges explore (default: the git root)
   --help, -h   Show this help message
   --version, -v Show the version number
   `);

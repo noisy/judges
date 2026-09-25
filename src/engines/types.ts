@@ -2,6 +2,8 @@ import { SupportedEngine } from '../types.js';
 
 export interface EngineRequest {
   prompt: string;
+  mode: 'one-shot' | 'agent';
+  cwd?: string; // repository root an agent judge explores; one-shot judges read nothing from disk
   model?: string;
   timeoutMs: number;
   maxBudgetUsd?: number;

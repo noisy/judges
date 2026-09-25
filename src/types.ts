@@ -1,5 +1,6 @@
 export interface EvaluationContext {
   type: 'diff' | 'files';
+  root?: string; // repository root agent judges explore; the git root when unset
   rawDiff?: string;
   files: Array<{
     path: string;

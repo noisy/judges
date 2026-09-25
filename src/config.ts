@@ -22,6 +22,7 @@ export interface AppConfig {
   engine: SupportedEngine;
   ruleDirs: string[];
   only: string[];
+  root?: string;
   command?: 'config' | 'markers';
   configAction?: 'check' | 'list' | 'show' | 'which';
   configTarget?: string;
@@ -29,7 +30,7 @@ export interface AppConfig {
 
 export function parseArgs(argv: string[]): AppConfig {
   const parsed = mri(argv, {
-    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules', 'only'],
+    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules', 'only', 'root'],
     boolean: ['json', 'help', 'version', 'short', 'full', 'staged', 'diff', 'last-commit', 'check', 'list'],
     alias: {
       f: 'file',
@@ -111,6 +112,7 @@ export function parseArgs(argv: string[]): AppConfig {
     engine,
     ruleDirs,
     only,
+    root: parsed.root,
     command,
     configAction,
     configTarget,

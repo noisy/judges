@@ -18,8 +18,9 @@ export function buildClaudeArgs(req: EngineRequest): string[] {
 }
 
 // One-shot judges read nothing from disk, so a neutral directory keeps repo CLAUDE.md files out.
+// Agent judges explore the repository, so they run in its root.
 export function claudeWorkingDir(req: EngineRequest): string | undefined {
-  return req.tools.length === 0 ? os.tmpdir() : undefined;
+  return req.mode === 'agent' ? req.cwd : os.tmpdir();
 }
 
 export function interpretClaudeOutput(stdout: string, req: EngineRequest): OutputInterpretation {
@@ -68,6 +69,7 @@ export const claudeEngine = createCliEngine({
   name: 'claude',
   buildArgs: buildClaudeArgs,
   workingDir: claudeWorkingDir,
+  supportsAgentMode: true,
   interpretOutput: interpretClaudeOutput,
   explainFailure: explainClaudeFailure
 });

@@ -5,6 +5,7 @@ import { Judge, displayName } from './judges.js';
 import { PlanItem } from './plan.js';
 import { Marker, isCovered } from './markers.js';
 import { SEVERITY_SCORE } from './config.js';
+import { repoRoot } from './files.js';
 import { EvaluationContext, Issue, JudgeEvent, JudgeResult, SupportedEngine } from './types.js';
 
 type JudgeOutcome = Pick<JudgeResult, 'status' | 'issues' | 'suppressed' | 'error' | 'costUsd' | 'turns'>;
@@ -65,7 +66,7 @@ async function evaluateJudge(
 ): Promise<JudgeOutcome> {
   try {
     const prompt = constructPrompt(judge, context, markers);
-    const response = await getEngine(engine).run(buildEngineRequest(judge, prompt));
+    const response = await getEngine(engine).run(buildEngineRequest(judge, prompt, context.root ?? repoRoot()));
     const issues = attributeToRule(judge, parseLLMOutput(response.rawOutput));
     const { kept, suppressed } = dropCovered(judge, issues, markers);
     return { status: 'ok', issues: sortBySeverity(kept), suppressed, costUsd: response.costUsd, turns: response.turns };
@@ -75,9 +76,11 @@ async function evaluateJudge(
   }
 }
 
-export function buildEngineRequest(judge: Judge, prompt: string): EngineRequest {
+export function buildEngineRequest(judge: Judge, prompt: string, cwd?: string): EngineRequest {
   return {
     prompt,
+    mode: judge.mode,
+    cwd,
     model: judge.model,
     timeoutMs: judge.timeout_seconds * 1000,
     maxBudgetUsd: judge.max_budget_usd,

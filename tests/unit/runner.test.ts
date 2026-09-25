@@ -63,6 +63,14 @@ describe('runPlan outcome mapping', () => {
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 30000, tools: [] }));
   });
 
+  it('runs the engine in the repository root of the context', async () => {
+    run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
+
+    await runPlan([{ judge, context: { ...inputContext, root: '/fixture-repo' }, markers: [] }], 'claude');
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: '/fixture-repo' }));
+  });
+
   it('maps unparseable engine output to status error', async () => {
     run.mockResolvedValue({ rawOutput: 'not json', durationMs: 5 });
 
@@ -182,6 +190,8 @@ describe('buildEngineRequest', () => {
 
     expect(buildEngineRequest(judge, 'prompt')).toEqual({
       prompt: 'prompt',
+      mode: undefined,
+      cwd: undefined,
       model: undefined,
       timeoutMs: 45000,
       maxBudgetUsd: undefined,
@@ -191,10 +201,12 @@ describe('buildEngineRequest', () => {
   });
 
   it('maps the judge engine options onto the request', () => {
-    const judge = { timeout_seconds: 60, model: 'small', tools: ['Read'], max_budget_usd: 0.5, max_turns: 4 } as Judge;
+    const judge = { mode: 'agent', timeout_seconds: 60, model: 'small', tools: ['Read'], max_budget_usd: 0.5, max_turns: 4 } as Judge;
 
-    expect(buildEngineRequest(judge, 'prompt')).toEqual({
+    expect(buildEngineRequest(judge, 'prompt', '/repo')).toEqual({
       prompt: 'prompt',
+      mode: 'agent',
+      cwd: '/repo',
       model: 'small',
       timeoutMs: 60000,
       maxBudgetUsd: 0.5,

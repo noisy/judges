@@ -1,12 +1,13 @@
 import os from 'os';
 import { describe, it, expect } from 'vitest';
 import { buildClaudeArgs, claudeWorkingDir, explainClaudeFailure, interpretClaudeOutput } from '../../src/engines/claude.js';
-import { buildCodexArgs } from '../../src/engines/codex.js';
-import { buildGeminiArgs } from '../../src/engines/gemini.js';
+import { buildCodexArgs, codexEngine } from '../../src/engines/codex.js';
+import { buildGeminiArgs, geminiEngine } from '../../src/engines/gemini.js';
 import { resolveModel } from '../../src/engines/models.js';
 import { EngineRequest } from '../../src/engines/types.js';
 
-const baseRequest: EngineRequest = { prompt: 'review this', timeoutMs: 30000, tools: [] };
+const baseRequest: EngineRequest = { prompt: 'review this', mode: 'one-shot', timeoutMs: 30000, tools: [] };
+const agentRequest: EngineRequest = { ...baseRequest, mode: 'agent', tools: ['Read', 'Grep', 'Glob'], cwd: '/repo' };
 
 function flagValue(args: string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
@@ -61,8 +62,14 @@ describe('claudeWorkingDir', () => {
     expect(claudeWorkingDir(baseRequest)).toBe(os.tmpdir());
   });
 
-  it('keeps the repo cwd for judges with tools so they can read files', () => {
-    expect(claudeWorkingDir({ ...baseRequest, tools: ['Read'] })).toBeUndefined();
+  it('runs agent judges in the repository root so they can explore it', () => {
+    expect(claudeWorkingDir(agentRequest)).toBe('/repo');
+  });
+});
+
+describe('agent mode support', () => {
+  it.each([codexEngine, geminiEngine])('$name fails an agent judge instead of running it one-shot', async (engine) => {
+    await expect(engine.run(agentRequest)).rejects.toThrow(`agent mode not supported by ${engine.name}`);
   });
 });
 
