@@ -10,3 +10,5 @@ export interface EvaluationContext {
     linesChanged: number;
   };
 }
+
+export type SupportedEngine = 'claude' | 'codex' | 'gemini';

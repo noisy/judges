@@ -3,6 +3,8 @@ import mri from 'mri';
 export const DEFAULT_MAX_ISSUES_TO_SHOW = 3;
 export const SEVERITY_SCORE: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
+import { SupportedEngine } from './types.js';
+
 export interface AppConfig {
   file?: string | string[];
   paths: string[];
@@ -17,7 +19,7 @@ export interface AppConfig {
   visibleIssueLimit: number;
   failOn?: string;
   lastCommit: boolean;
-  engine: 'claude' | 'codex';
+  engine: SupportedEngine;
   command?: 'config';
   configAction?: 'check' | 'list' | 'show' | 'which';
   configTarget?: string;
@@ -82,7 +84,7 @@ export function parseArgs(argv: string[]): AppConfig {
   let failOn = parsed['fail-on']?.toLowerCase();
   if (failOn === 'med') failOn = 'medium';
 
-  const engine = parsed.engine === 'codex' ? 'codex' : 'claude';
+  const engine = ['codex', 'gemini'].includes(parsed.engine) ? parsed.engine as SupportedEngine : 'claude';
 
   return {
     file: parsed.file,

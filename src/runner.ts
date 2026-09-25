@@ -2,18 +2,19 @@ import { executeLLM, Issue, parseLLMOutput } from './llm.js';
 import { constructPrompt } from './prompt.js';
 import { JudgeProgress } from './ui.js';
 import { SEVERITY_SCORE } from './config.js';
-import { EvaluationContext } from './types.js';
+import { EvaluationContext, SupportedEngine } from './types.js';
 
 export async function runJudgesParallel(
   progressList: JudgeProgress[],
   inputContext: EvaluationContext,
-  engine: 'claude' | 'codex'
+  engine: SupportedEngine
 ): Promise<any[]> {
   const promises = progressList.map(async (p) => {
     p.state = 'running';
     try {
       const prompt = constructPrompt(p.judge, inputContext);
-      const issues = await executeLLM(prompt, engine);
+      const timeoutMs = (p.judge.timeout_seconds || 30) * 1000;
+      const issues = await executeLLM(prompt, engine, timeoutMs);
       p.state = 'done';
       p.issues = issues;
       
