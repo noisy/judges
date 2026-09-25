@@ -14,6 +14,7 @@ export type OutputInterpretation = Omit<EngineResponse, 'durationMs'>;
 interface CliAdapter {
   name: SupportedEngine;
   buildArgs(req: EngineRequest): string[];
+  supportsAgentMode?: boolean;
   interpretOutput(stdout: string, req: EngineRequest): OutputInterpretation;
   // Directory to run the CLI in; the current one when undefined.
   workingDir?(req: EngineRequest): string | undefined;
@@ -33,6 +34,10 @@ export function createCliEngine(adapter: CliAdapter): Engine {
     name: adapter.name,
     isAvailable,
     async run(req) {
+      // A one-shot fallback would pass a rule it never checked, so an agent judge fails instead.
+      if (req.mode === 'agent' && !adapter.supportsAgentMode) {
+        throw new Error(`agent mode not supported by ${adapter.name}`);
+      }
       if (!isAvailable()) {
         throw new Error(`${adapter.name} CLI not found on PATH`);
       }

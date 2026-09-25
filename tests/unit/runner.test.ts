@@ -63,6 +63,32 @@ describe('runPlan outcome mapping', () => {
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 30000, tools: [] }));
   });
 
+  it('runs the engine in the repository root of the context', async () => {
+    run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
+
+    await runPlan([{ judge, context: { ...inputContext, root: '/fixture-repo' }, markers: [] }], 'claude');
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: '/fixture-repo' }));
+  });
+
+  it('records which files the judge was given in the prompt', async () => {
+    run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
+    const context: EvaluationContext = { type: 'files', files: [{ path: 'src/a.py', content: 'x' }, { path: 'src/b.py', content: 'y' }] };
+
+    const [result] = await runPlan([{ judge, context, markers: [] }], 'claude');
+
+    expect(result.inline).toEqual(['src/a.py', 'src/b.py']);
+  });
+
+  it('keeps what an agent judge examined in the result', async () => {
+    const examined = [{ tool: 'Read', target: 'tests/test_a.py' }];
+    run.mockResolvedValue({ rawOutput: '[]', durationMs: 5, examined });
+
+    const [result] = await runPlan([planned()], 'claude');
+
+    expect(result.examined).toEqual(examined);
+  });
+
   it('maps unparseable engine output to status error', async () => {
     run.mockResolvedValue({ rawOutput: 'not json', durationMs: 5 });
 
@@ -182,23 +208,29 @@ describe('buildEngineRequest', () => {
 
     expect(buildEngineRequest(judge, 'prompt')).toEqual({
       prompt: 'prompt',
+      mode: undefined,
+      cwd: undefined,
       model: undefined,
       timeoutMs: 45000,
       maxBudgetUsd: undefined,
       tools: [],
+      allowRead: [],
       maxTurns: undefined
     });
   });
 
   it('maps the judge engine options onto the request', () => {
-    const judge = { timeout_seconds: 60, model: 'small', tools: ['Read'], max_budget_usd: 0.5, max_turns: 4 } as Judge;
+    const judge = { mode: 'agent', timeout_seconds: 60, model: 'small', tools: ['Read'], allow_read: ['../billing/**'], max_budget_usd: 0.5, max_turns: 4 } as Judge;
 
-    expect(buildEngineRequest(judge, 'prompt')).toEqual({
+    expect(buildEngineRequest(judge, 'prompt', '/repo')).toEqual({
       prompt: 'prompt',
+      mode: 'agent',
+      cwd: '/repo',
       model: 'small',
       timeoutMs: 60000,
       maxBudgetUsd: 0.5,
       tools: ['Read'],
+      allowRead: ['../billing/**'],
       maxTurns: 4
     });
   });

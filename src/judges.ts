@@ -17,6 +17,7 @@ export interface Judge {
   check: 'judge' | 'deterministic';
   model?: string;
   tools: string[];
+  allow_read: string[]; // directories outside the repo an agent judge may read
   max_turns?: number;
   command?: string;
   format: 'judge-md' | 'rule';

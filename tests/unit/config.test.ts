@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseArgs } from '../../src/config.js';
+import { parseArgs, inputUsageError, ROOT_NEEDS_FILE_INPUT } from '../../src/config.js';
 
 describe('CLI Configuration Parsing', () => {
   it('should parse default boolean flags correctly', () => {
@@ -73,3 +73,17 @@ describe('CLI Configuration Parsing', () => {
     expect(parseArgs(['--rules', 'rules', '--rules', 'shared/rules']).ruleDirs).toEqual(['rules', 'shared/rules']);
   });
 });
+
+describe('inputUsageError', () => {
+  it.each([[['--root', 'fixture']], [['--root', 'fixture', '--staged']], [['--root', 'fixture', '--diff']],
+    [['--root', 'fixture', '--last-commit']]])('rejects --root with diff input: %j', (argv) => {
+    expect(inputUsageError(parseArgs(argv))).toBe(ROOT_NEEDS_FILE_INPUT);
+  });
+
+  it('accepts --root with file input, and no --root at all', () => {
+    expect(inputUsageError(parseArgs(['--root', 'fixture', 'fixture/src/a.py']))).toBeUndefined();
+    expect(inputUsageError(parseArgs(['--root', 'fixture', '-f', 'fixture/src/a.py']))).toBeUndefined();
+    expect(inputUsageError(parseArgs(['--staged']))).toBeUndefined();
+  });
+});
+

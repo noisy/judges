@@ -9,7 +9,7 @@ Each `JUDGE.md` file defines an independent AI evaluator in `judge-cli`. The fil
 | `name` | `string` | **Yes** | - | Display name of the judge in the UI. |
 | `description` | `string` | **Yes** | - | A short description explaining what the judge evaluates. |
 | `version` | `string` | **Yes** | - | Semantic versioning format (e.g. `1.0.0`). Strictly validated. |
-| `mode` | `'one-shot' \| 'agent'` | No | `'one-shot'` | Execution mode. Currently `one-shot` is supported. `agent` triggers a fallback warning. |
+| `mode` | `'one-shot' \| 'agent'` | No | `'one-shot'` | `one-shot` sees only the text it is given; `agent` may read the repository. See [Agent judges](#agent-judges). |
 | `timeout_seconds` | `number` | No | `30` | Execution timeout in seconds. Must be a positive integer. |
 
 `JUDGE.md` files also accept the rule settings below (`scope`, `severity`, `check`, `model`, `budget`, `tools`, `max_turns`, `command`).
@@ -60,9 +60,11 @@ A rule is a flat Markdown file `<dir>/<id>.md`, loaded from every directory pass
 | `command` | `string` | No | - | Script or test for a `deterministic` rule. Only allowed with `check: deterministic`. |
 | `model` | `string` | No | engine default | Alias (`small`, `medium`, `large`) or an exact model id. |
 | `budget` | `string` | No | - | Time and cost caps, e.g. `30s, $0.10` or `2m`. Either part is optional. The time part sets `timeout_seconds`; setting both is an error. |
-| `tools` | `string[]` | No | `[]` | Read-only tools for the judge. Empty means one-shot. |
-| `max_turns` | `number` | No | - | Turn cap. Must be a positive integer. |
-| `timeout_seconds` | `number` | No | `30` | Same as for `JUDGE.md`. |
+| `mode` | `'one-shot' \| 'agent'` | No | `'one-shot'` | Same as for `JUDGE.md`. |
+| `tools` | `string[]` | No | agent: `[Read, Grep, Glob]` | Only with `mode: agent`. Read-only tools only: `Read`, `Grep`, `Glob`. |
+| `allow_read` | `string[]` | No | `[]` | Only with `mode: agent`. Directories outside the repo the judge may read. See [Reading outside the repo](#reading-outside-the-repo). |
+| `max_turns` | `number` | No | agent: `8` | Turn cap. Must be a positive integer. |
+| `timeout_seconds` | `number` | No | `30`, agent: `120` | Same as for `JUDGE.md`. |
 
 ```markdown
 ---
@@ -84,6 +86,68 @@ check: deterministic
 command: npm run lint
 ---
 ```
+
+## Agent judges
+
+`mode` is the single switch. A `one-shot` judge gets the rule, the files in scope and the diff, and answers from that text alone. An `agent` judge gets the same, then may read other files, search and list directories (sibling modules, tests, imports) before it answers. It reports only violations in the changed files in scope.
+
+```markdown
+---
+id: connector-has-integration-test
+mode: agent
+scope: ["src/connectors/**/*.py"]
+severity: medium
+model: small
+budget: 90s, $0.25
+---
+Intent: every connector has an integration test.
+```
+
+- **Defaults.** `tools: [Read, Grep, Glob]`, `max_turns: 8`, and a 120 s timeout when neither `budget` nor `timeout_seconds` sets one.
+- **Validation.** `tools` on a one-shot judge is an error. A tool outside `Read`, `Grep`, `Glob` is an error on any judge: judges are read-only by construction.
+- **Engines.** Only `claude` runs agent judges. `codex` and `gemini` report the judge as an error, `agent mode not supported by <engine>`, never a silent one-shot run.
+- **Working directory.** The repository root: the git root, or `--root <dir>` (file input only). File paths are shown relative to it. One-shot judges run in a temp dir, so no repository `CLAUDE.md` reaches them.
+- **Known limitation: the repository's `CLAUDE.md`.** Agent judges run in the repository root, so the CLI auto-loads that repository's own `CLAUDE.md`, which can influence the judge. `--bare` would stop it, but it also turns off OAuth and keychain login, so it is not used.
+- **Committed content.** The files in the prompt are what is being committed (the staged content in `--staged` mode). The judge is told the files on disk may differ.
+- **Line numbers.** In both modes file contents are shown as `  17| code` and the judge reports those numbers, so findings land on the lines markers cover.
+- **Run record.** The result lists the files given in the prompt as `inline: [paths]` (every judge), and every tool call as `examined: [{ tool, target, denied? }]`. The summary line shows counts, e.g. `(read 2 files, 4 searches)`; `--json` has the full list.
+
+### Sandbox
+
+Every claude judge runs with:
+
+| Flag | Why |
+| :--- | :--- |
+| `--tools <list>` | Only the rule's read-only tools exist in the session; one-shot judges get none. |
+| `--restricted` | Confines `Read`, `Grep` and `Glob` to the working directory. Absolute paths, `../` and symlinks pointing out of it are refused, whatever the settings allow. |
+| `--permission-mode dontAsk`, `--permission-prompts none` | Anything not pre-approved is denied at once instead of waiting for an answer, so a print-mode run never hangs on a prompt. |
+| `--disallowedTools Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch` | Write, exec and network tools stay out even if `--tools` ever named one. |
+| `--settings '{"permissions":{...}}'` | Deny rules for secrets on every run, plus the allow rules for `allow_read`. |
+| `--add-dir <dir>` | One per `allow_read` directory; nothing otherwise. |
+| `--strict-mcp-config`, `--setting-sources ''`, `--no-session-persistence` | Minimal configuration: no MCP servers, hooks, settings or sessions inherited from the developer. |
+
+Verified on claude 2.1.282 with a canary file in `/tmp`: an agent judge told to read it, glob for it, or reach it through `../` or a symlink was refused each time (the calls show up as `denied` in `examined`), while reading files in the repository worked. A judge told to create a file had no tool to do it, and no file was created. Runs took 12 to 18 seconds; none waited on a prompt.
+
+### Reading outside the repo
+
+Repo only is the default. Services often live side by side in one parent folder, and a judge may need a sibling, for example to check how the API a connector calls is really shaped. `allow_read` names those directories:
+
+```markdown
+---
+id: client-matches-billing-api
+mode: agent
+scope: ["src/clients/billing/**/*.py"]
+allow_read: ["../billing-service/**", "../shared-contracts/**"]
+---
+Intent: the billing client calls endpoints the billing service really exposes, with the fields it really expects.
+```
+
+- **Forms.** Relative to the repo root (`../billing-service`), absolute (`/srv/contracts`) or home (`~/contracts`), optionally ending in `/**`. Each entry is a whole directory: the sandbox grants whole directories, so a narrower glob such as `../billing-service/*.py` is a validation error rather than a promise it cannot keep.
+- **Mapping.** Each directory joins the working directories with `--add-dir`, and a matching `Read(//<dir>/**)` allow rule goes into `--settings`. `--restricted` still refuses everything else outside the repo.
+- **Secrets floor.** On every run, whitelisted or not, reads matching `**/.env*`, `**/.ssh/**`, `**/.aws/**`, `**/.claude*/**`, `**/*.pem` or `**/*key*.json` are denied, and Grep skips those files. The list is `SECRET_DENY_PATTERNS` in `src/engines/claude.ts`.
+- **Run record.** `examined` shows reads outside the repo with their full path, so a use of the whitelist is visible.
+
+Verified on claude 2.1.282 with a repo and a whitelisted sibling side by side in `/tmp`, twice: `../billing/docs/api.txt` in the sibling was read; `../billing/.env` and `../billing/docs/service-key.json` were denied; a Grep over the sibling for the canary text in those two files found nothing; a canary file in `/tmp` outside both stayed denied. None of the denied canary strings appeared in the output.
 
 ## Validating Judges
 

@@ -22,7 +22,7 @@ A rule is a single Markdown file named after its id, kept in any directory (for 
 judge --staged --rules rules
 ```
 
-`--rules` can be repeated. A rule overrides a judge with the same id. The frontmatter needs only `id` (matching the file name); `scope`, `severity`, `check`, `model`, `budget`, `tools` and `max_turns` are optional. See [docs/judge-format.md](docs/judge-format.md#rule-files) for every field.
+`--rules` can be repeated. A rule overrides a judge with the same id. The frontmatter needs only `id` (matching the file name); `scope`, `severity`, `check`, `mode`, `model`, `budget`, `tools`, `allow_read` and `max_turns` are optional. `mode: agent` lets the judge read the repository with read-only tools; see [Agent judges](docs/judge-format.md#agent-judges). See [docs/judge-format.md](docs/judge-format.md#rule-files) for every field.
 
 ```markdown
 ---

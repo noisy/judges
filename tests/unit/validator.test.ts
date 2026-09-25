@@ -71,7 +71,7 @@ describe('Zod Schema Frontend Validation (`validateJudge`)', () => {
     expect(result.errors[0]).toContain('Invalid option');
   });
 
-  it('should produce a non-fatal warning and fallback to one-shot when mode is agent', () => {
+  it('should keep agent mode without warnings', () => {
     const data = {
       name: 'Agent Judge',
       description: 'Operates as an agent',
@@ -81,9 +81,8 @@ describe('Zod Schema Frontend Validation (`validateJudge`)', () => {
     
     const result = validateJudge(data);
     expect(result.valid).toBe(true);
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]).toContain('agent mode not yet implemented, falling back to one-shot');
-    expect(result.data.mode).toBe('one-shot'); // Forced fallback mechanism
+    expect(result.warnings).toHaveLength(0);
+    expect(result.data.mode).toBe('agent');
   });
 
   it('should strictly reject invalid timeout seconds', () => {
@@ -126,7 +125,7 @@ describe('validateRule', () => {
     expect(result.valid).toBe(true);
     expect(result.data).toMatchObject({
       name: 'booleans', description: '', version: '', scope: ['**/*'], severity: 'medium',
-      check: 'judge', tools: [], timeout_seconds: 30, mode: 'one-shot',
+      check: 'judge', tools: [], allow_read: [], timeout_seconds: 30, mode: 'one-shot',
     });
   });
 
@@ -175,5 +174,69 @@ describe('validateRule', () => {
     const result = validateRule({ id: 'r', max_turns: 0 }, 'r');
     expect(result.valid).toBe(false);
     expect(result.errors[0]).toContain('`max_turns` must be positive');
+  });
+});
+
+describe('mode and tools', () => {
+  it('gives an agent read-only tools, a turn cap and a longer timeout by default', () => {
+    const result = validateRule({ id: 'r', mode: 'agent' }, 'r');
+    expect(result.valid).toBe(true);
+    expect(result.data).toMatchObject({ tools: ['Read', 'Grep', 'Glob'], max_turns: 8, timeout_seconds: 120 });
+  });
+
+  it('keeps explicit agent settings and a budget time over the agent defaults', () => {
+    const result = validateRule({ id: 'r', mode: 'agent', tools: ['Read'], max_turns: 3, budget: '90s, $0.25' }, 'r');
+    expect(result.data).toMatchObject({ tools: ['Read'], max_turns: 3, timeout_seconds: 90, max_budget_usd: 0.25 });
+  });
+
+  it('gives a one-shot judge no tools and no turn cap', () => {
+    const result = validateRule({ id: 'r' }, 'r');
+    expect(result.data).toMatchObject({ tools: [], timeout_seconds: 30 });
+    expect(result.data.max_turns).toBeUndefined();
+  });
+
+  it('rejects tools on a one-shot rule', () => {
+    const result = validateRule({ id: 'r', tools: ['Read'] }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('error: `tools` is only allowed with `mode: agent`');
+  });
+
+  it.each(['Write', 'Edit', 'Bash', 'WebFetch', 'LS'])('rejects the non-read-only tool %s on any rule', (tool) => {
+    const result = validateRule({ id: 'r', mode: 'agent', tools: ['Read', tool] }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toContain('`tools` entries must be read-only tools: Read, Grep, Glob');
+  });
+
+  it('rejects an empty tool list for an agent', () => {
+    const result = validateRule({ id: 'r', mode: 'agent', tools: [] }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toContain('`tools` cannot be empty');
+  });
+
+  it('lets an agent read nothing outside the repo by default', () => {
+    expect(validateRule({ id: 'r', mode: 'agent' }, 'r').data.allow_read).toEqual([]);
+  });
+
+  it.each(['../billing-service/**', '../shared-contracts', '/srv/specs/**', '~/contracts/**', '../a/b/'])(
+    'accepts the directory pattern %s', (pattern) => {
+      expect(validateRule({ id: 'r', mode: 'agent', allow_read: [pattern] }, 'r').valid).toBe(true);
+    });
+
+  it.each(['../billing/*.py', '../billing/**/api.py', '../{a,b}/**', '../billing/api?.py'])(
+    'rejects the narrower glob %s, since the sandbox grants whole directories', (pattern) => {
+      const result = validateRule({ id: 'r', mode: 'agent', allow_read: [pattern] }, 'r');
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('`allow_read` entries must be a directory');
+    });
+
+  it('rejects allow_read on a one-shot rule', () => {
+    const result = validateRule({ id: 'r', allow_read: ['../billing-service/**'] }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('error: `allow_read` is only allowed with `mode: agent`');
+  });
+
+  it('applies the same checks to JUDGE.md judges', () => {
+    const result = validateJudge({ name: 'j', description: 'd', version: '1.0.0', tools: ['Bash'] });
+    expect(result.valid).toBe(false);
   });
 });

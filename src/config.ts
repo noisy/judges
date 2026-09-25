@@ -22,14 +22,24 @@ export interface AppConfig {
   engine: SupportedEngine;
   ruleDirs: string[];
   only: string[];
+  root?: string;
   command?: 'config' | 'markers';
   configAction?: 'check' | 'list' | 'show' | 'which';
   configTarget?: string;
 }
 
+export const ROOT_NEEDS_FILE_INPUT = '--root is only supported with file input';
+
+// Diff paths are relative to the git root, so a different root would not match them.
+export function inputUsageError(config: AppConfig): string | undefined {
+  const hasFileInput = config.paths.length > 0 || config.file !== undefined;
+  if (config.command === undefined && config.root !== undefined && !hasFileInput) return ROOT_NEEDS_FILE_INPUT;
+  return undefined;
+}
+
 export function parseArgs(argv: string[]): AppConfig {
   const parsed = mri(argv, {
-    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules', 'only'],
+    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules', 'only', 'root'],
     boolean: ['json', 'help', 'version', 'short', 'full', 'staged', 'diff', 'last-commit', 'check', 'list'],
     alias: {
       f: 'file',
@@ -111,6 +121,7 @@ export function parseArgs(argv: string[]): AppConfig {
     engine,
     ruleDirs,
     only,
+    root: parsed.root,
     command,
     configAction,
     configTarget,
