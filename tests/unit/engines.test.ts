@@ -1,5 +1,6 @@
+import os from 'os';
 import { describe, it, expect } from 'vitest';
-import { buildClaudeArgs, interpretClaudeOutput } from '../../src/engines/claude.js';
+import { buildClaudeArgs, claudeWorkingDir, explainClaudeFailure, interpretClaudeOutput } from '../../src/engines/claude.js';
 import { buildCodexArgs } from '../../src/engines/codex.js';
 import { buildGeminiArgs } from '../../src/engines/gemini.js';
 import { resolveModel } from '../../src/engines/models.js';
@@ -55,6 +56,16 @@ describe('buildClaudeArgs', () => {
   });
 });
 
+describe('claudeWorkingDir', () => {
+  it('runs one-shot judges in a neutral temp dir so no repo CLAUDE.md is picked up', () => {
+    expect(claudeWorkingDir(baseRequest)).toBe(os.tmpdir());
+  });
+
+  it('keeps the repo cwd for judges with tools so they can read files', () => {
+    expect(claudeWorkingDir({ ...baseRequest, tools: ['Read'] })).toBeUndefined();
+  });
+});
+
 describe('buildCodexArgs and buildGeminiArgs', () => {
   it('pass the prompt and ignore unsupported fields', () => {
     const request = { ...baseRequest, tools: ['Read'], maxBudgetUsd: 1, maxTurns: 3 };
@@ -73,23 +84,46 @@ describe('interpretClaudeOutput', () => {
   it('extracts result text, cost and turns from the JSON envelope', () => {
     const stdout = JSON.stringify({ type: 'result', is_error: false, result: '[]', total_cost_usd: 0.0123, num_turns: 1 });
 
-    expect(interpretClaudeOutput(stdout)).toEqual({ rawOutput: '[]', costUsd: 0.0123, turns: 1 });
+    expect(interpretClaudeOutput(stdout, baseRequest)).toEqual({ rawOutput: '[]', costUsd: 0.0123, turns: 1 });
   });
 
   it('leaves cost and turns undefined when the envelope lacks them', () => {
     const stdout = JSON.stringify({ type: 'result', result: '[]' });
 
-    expect(interpretClaudeOutput(stdout)).toEqual({ rawOutput: '[]', costUsd: undefined, turns: undefined });
+    expect(interpretClaudeOutput(stdout, baseRequest)).toEqual({ rawOutput: '[]', costUsd: undefined, turns: undefined });
   });
 
   it('falls back to the plain stdout when it is not a JSON envelope', () => {
-    expect(interpretClaudeOutput('[{"file":"a.ts"}]')).toEqual({ rawOutput: '[{"file":"a.ts"}]' });
-    expect(interpretClaudeOutput('plain text')).toEqual({ rawOutput: 'plain text' });
+    expect(interpretClaudeOutput('[{"file":"a.ts"}]', baseRequest)).toEqual({ rawOutput: '[{"file":"a.ts"}]' });
+    expect(interpretClaudeOutput('plain text', baseRequest)).toEqual({ rawOutput: 'plain text' });
   });
 
   it('throws when the envelope reports an error', () => {
     const stdout = JSON.stringify({ type: 'result', is_error: true, result: 'budget exceeded' });
 
-    expect(() => interpretClaudeOutput(stdout)).toThrow('budget exceeded');
+    expect(() => interpretClaudeOutput(stdout, baseRequest)).toThrow('budget exceeded');
+  });
+
+  it('names the budget limit when the budget is exceeded', () => {
+    const stdout = JSON.stringify({ type: 'result', subtype: 'error_max_budget_usd', is_error: true, result: null, errors: ['Reached maximum budget ($0.1)'] });
+
+    expect(() => interpretClaudeOutput(stdout, { ...baseRequest, maxBudgetUsd: 0.1 })).toThrow('claude CLI stopped: budget exceeded ($0.1)');
+  });
+});
+
+describe('explainClaudeFailure', () => {
+  it('explains budget and turn limits from the error envelope of a failed exit', () => {
+    const budget = JSON.stringify({ type: 'result', subtype: 'error_max_budget_usd', is_error: true, result: null });
+    const turns = JSON.stringify({ type: 'result', subtype: 'error_max_turns', is_error: true });
+
+    expect(explainClaudeFailure(budget, { ...baseRequest, maxBudgetUsd: 0.05 })).toBe('budget exceeded ($0.05)');
+    expect(explainClaudeFailure(turns, { ...baseRequest, maxTurns: 3 })).toBe('turn limit reached (3)');
+  });
+
+  it('uses the reported errors for other failures and nothing for non-JSON output', () => {
+    const other = JSON.stringify({ type: 'result', subtype: 'error_during_execution', is_error: true, errors: ['boom'] });
+
+    expect(explainClaudeFailure(other, baseRequest)).toBe('boom');
+    expect(explainClaudeFailure('Segmentation fault', baseRequest)).toBeUndefined();
   });
 });

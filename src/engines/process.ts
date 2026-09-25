@@ -14,7 +14,17 @@ export type OutputInterpretation = Omit<EngineResponse, 'durationMs'>;
 interface CliAdapter {
   name: SupportedEngine;
   buildArgs(req: EngineRequest): string[];
-  interpretOutput(stdout: string): OutputInterpretation;
+  interpretOutput(stdout: string, req: EngineRequest): OutputInterpretation;
+  // Directory to run the CLI in; the current one when undefined.
+  workingDir?(req: EngineRequest): string | undefined;
+  // Human-readable reason for a non-zero exit, read from the CLI's own output.
+  explainFailure?(stdout: string, req: EngineRequest): string | undefined;
+}
+
+interface CliResult {
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
 }
 
 export function createCliEngine(adapter: CliAdapter): Engine {
@@ -28,8 +38,11 @@ export function createCliEngine(adapter: CliAdapter): Engine {
       }
       const args = adapter.buildArgs({ ...req, prompt: stripNullBytes(req.prompt) });
       const startedAt = Date.now();
-      const stdout = await runCli(adapter.name, args, req.timeoutMs);
-      return { ...adapter.interpretOutput(stdout), durationMs: Date.now() - startedAt };
+      const result = await runCli(adapter.name, args, req.timeoutMs, adapter.workingDir?.(req));
+      if (result.exitCode !== 0 && result.exitCode !== null) {
+        throw exitError(adapter.name, result, adapter.explainFailure?.(result.stdout, req));
+      }
+      return { ...adapter.interpretOutput(result.stdout, req), durationMs: Date.now() - startedAt };
     }
   };
 }
@@ -44,9 +57,9 @@ function stripNullBytes(text: string): string {
   return text.replace(/\0/g, '');
 }
 
-function runCli(command: string, args: string[], timeoutMs: number): Promise<string> {
+function runCli(command: string, args: string[], timeoutMs: number, cwd?: string): Promise<CliResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], cwd });
 
     let stdoutData = '';
     let stderrData = '';
@@ -71,17 +84,18 @@ function runCli(command: string, args: string[], timeoutMs: number): Promise<str
 
     child.on('close', (code) => {
       clearTimeout(timeoutRef);
-      if (code !== 0 && code !== null) {
-        return reject(exitError(command, code, stderrData.trim() || stdoutData.trim()));
-      }
-      resolve(stdoutData.trim());
+      resolve({ exitCode: code, stdout: stdoutData.trim(), stderr: stderrData.trim() });
     });
   });
 }
 
-function exitError(command: string, code: number, details: string): Error {
+function exitError(command: string, result: CliResult, explanation?: string): Error {
+  if (explanation) {
+    return new Error(`${command} CLI stopped: ${explanation}`);
+  }
+  const details = result.stderr || result.stdout;
   if (details.includes("You've hit your usage limit") || details.toLowerCase().includes('rate limit')) {
     return new Error('API Error: Rate limit reached');
   }
-  return new Error(`${command} CLI exited with status ${code}: ${details}`);
+  return new Error(`${command} CLI exited with status ${result.exitCode}: ${details}`);
 }
