@@ -142,7 +142,7 @@ function printMarkerInventory(config: AppConfig): void {
 
 function describeSettings(judge: Judge): string {
   if (judge.format === 'rule') {
-    return `${judge.severity} · ${judge.check} · ${judge.timeout_seconds}s`;
+    return `${judge.severity} · ${judge.check} · ${judge.mode} · ${judge.timeout_seconds}s`;
   }
   return `v${judge.version} · ${judge.mode} · ${judge.timeout_seconds}s`;
 }
