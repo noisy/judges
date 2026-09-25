@@ -53,6 +53,18 @@ export function loadJudges(sources: JudgeSources): Judge[] {
   return mergeById(judges);
 }
 
+// Keeps only the judges named by --only; no names means all of them.
+export function selectJudges(judges: Judge[], ids: string[]): Judge[] {
+  if (ids.length === 0) return judges;
+
+  const knownIds = new Set(judges.map(judge => judge.id));
+  const unknownIds = ids.filter(id => !knownIds.has(id));
+  if (unknownIds.length > 0) {
+    throw new Error(`Unknown judge or rule id: ${unknownIds.join(', ')}`);
+  }
+  return judges.filter(judge => ids.includes(judge.id));
+}
+
 function findJudgeMdsInDir(baseDir: string): Judge[] {
   if (!fs.existsSync(baseDir)) {
     return [];

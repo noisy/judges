@@ -2,7 +2,7 @@
 import { parseArgs, AppConfig } from './config.js';
 import { extractDiff } from './diff.js';
 import { resolvePaths, readContents } from './files.js';
-import { discoverJudges, Judge } from './judges.js';
+import { discoverJudges, selectJudges, Judge } from './judges.js';
 import { ProgressRenderer } from './ui.js';
 import { EvaluationContext, JudgeResult } from './types.js';
 import { runPlan } from './runner.js';
@@ -110,7 +110,8 @@ main().catch((error) => {
 
 function loadJudgesOrExit(config: AppConfig): Judge[] {
   try {
-    return discoverJudges(config.ruleDirs);
+    const judges = discoverJudges(config.ruleDirs);
+    return config.command === 'config' ? judges : selectJudges(judges, config.only);
   } catch (error: any) {
     console.error(colors.red(`❌ Error: ${error.message}`));
     process.exit(1);
@@ -189,6 +190,7 @@ Options:
   --full       Show all issues found by judges
   --top <X>    Show the top X issues per judge (Default: 3)
   --rules <dir> Load flat rule files (<dir>/<id>.md); repeatable, overrides judges with the same id
+  --only <id>  Run only the named judge or rule; repeatable
   --help, -h   Show this help message
   --version, -v Show the version number
   `);
