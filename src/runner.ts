@@ -8,17 +8,6 @@ import { EvaluationContext, Issue, JudgeResult, SupportedEngine } from './types.
 
 type JudgeOutcome = Pick<JudgeResult, 'status' | 'issues' | 'error' | 'costUsd' | 'turns'>;
 
-// Engine options the judge loader may not provide yet; read defensively.
-interface JudgeEngineOptions {
-  timeout_seconds?: number;
-  model?: string;
-  tools?: string[];
-  max_budget_usd?: number;
-  max_turns?: number;
-}
-
-const DEFAULT_TIMEOUT_SECONDS = 30;
-
 export async function runJudgesParallel(
   progressList: JudgeProgress[],
   inputContext: EvaluationContext,
@@ -63,14 +52,13 @@ async function evaluateJudge(judge: Judge, inputContext: EvaluationContext, engi
 }
 
 export function buildEngineRequest(judge: Judge, prompt: string): EngineRequest {
-  const options: JudgeEngineOptions = judge;
   return {
     prompt,
-    model: options.model,
-    timeoutMs: (options.timeout_seconds || DEFAULT_TIMEOUT_SECONDS) * 1000,
-    maxBudgetUsd: options.max_budget_usd,
-    tools: options.tools ?? [],
-    maxTurns: options.max_turns
+    model: judge.model,
+    timeoutMs: judge.timeout_seconds * 1000,
+    maxBudgetUsd: judge.max_budget_usd,
+    tools: judge.tools,
+    maxTurns: judge.max_turns
   };
 }
 

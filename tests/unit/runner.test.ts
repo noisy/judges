@@ -20,6 +20,7 @@ function makeProgress(): JudgeProgress {
     name: 'SRP Validator',
     instructions: 'Check SRP.',
     timeout_seconds: 30,
+    tools: [],
     filePath: '/judges/srp/JUDGE.md'
   } as Judge;
   return { judge, state: 'pending', displayName: judge.name };
@@ -96,8 +97,8 @@ describe('runJudgesParallel outcome mapping', () => {
 });
 
 describe('buildEngineRequest', () => {
-  it('defaults to a one-shot request with the engine default model', () => {
-    const judge = { timeout_seconds: 45 } as Judge;
+  it('builds a one-shot request with the engine default model when the judge sets no engine options', () => {
+    const judge = { timeout_seconds: 45, tools: [] as string[] } as Judge;
 
     expect(buildEngineRequest(judge, 'prompt')).toEqual({
       prompt: 'prompt',
@@ -109,8 +110,8 @@ describe('buildEngineRequest', () => {
     });
   });
 
-  it('picks up optional engine fields once the judge provides them', () => {
-    const judge = { timeout_seconds: 60, model: 'small', tools: ['Read'], max_budget_usd: 0.5, max_turns: 4 } as unknown as Judge;
+  it('maps the judge engine options onto the request', () => {
+    const judge = { timeout_seconds: 60, model: 'small', tools: ['Read'], max_budget_usd: 0.5, max_turns: 4 } as Judge;
 
     expect(buildEngineRequest(judge, 'prompt')).toEqual({
       prompt: 'prompt',
