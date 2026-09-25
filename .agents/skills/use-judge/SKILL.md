@@ -49,7 +49,9 @@ When you run with `--json`, it outputs one result per judge, which look like:
         "message": "This component combines data fetching and presentation. Separate into a container."
       }
     ],
-    "durationMs": 8421
+    "durationMs": 8421,
+    "costUsd": 0.0123,
+    "turns": 1
   },
   {
     "judgeId": "architecture",
@@ -63,7 +65,7 @@ When you run with `--json`, it outputs one result per judge, which look like:
 ]
 ```
 
-`status` is `ok`, `error` or `timeout`. Only `ok` results carry issues; for `error` and `timeout` the judge did not run, so read `error` and do not treat it as a code finding.
+`status` is `ok`, `error` or `timeout`. Only `ok` results carry issues; for `error` and `timeout` the judge did not run, so read `error` and do not treat it as a code finding. `costUsd` and `turns` are present only when the engine reports them (currently the claude engine).
 
 ## Your Responsibility
 If you receive issues from the `judge` CLI, you MUST:
