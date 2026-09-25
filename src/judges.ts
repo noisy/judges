@@ -2,15 +2,24 @@ import * as fs from 'fs';
 import * as path from 'path';
 import os from 'os';
 import matter from 'gray-matter';
-import { validateJudge } from './validator.js';
+import { validateJudge, validateRule, defaultSettings, ValidationResult } from './validator.js';
 
 export interface Judge {
-  id: string; // Directory name
+  id: string; // Directory name for JUDGE.md, file name for rules
   name: string;
   description: string;
   version: string;
   mode: 'one-shot' | 'agent';
   timeout_seconds: number;
+  max_budget_usd?: number;
+  scope: string[];
+  severity: 'low' | 'medium' | 'high';
+  check: 'judge' | 'deterministic';
+  model?: string;
+  tools: string[];
+  max_turns?: number;
+  command?: string;
+  format: 'judge-md' | 'rule';
   instructions: string;
   filePath: string;
   isValid: boolean;
@@ -18,71 +27,97 @@ export interface Judge {
   validationWarnings: string[];
 }
 
-function findJudgesInDir(baseDir: string): Judge[] {
-  const judges: Judge[] = [];
-
-  if (!fs.existsSync(baseDir)) {
-    return judges;
-  }
-
-  const entries = fs.readdirSync(baseDir, { withFileTypes: true });
-
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      const judgeDirPath = path.join(baseDir, entry.name);
-      const judgeMdPath = path.join(judgeDirPath, 'JUDGE.md');
-
-      if (fs.existsSync(judgeMdPath)) {
-        try {
-          const content = fs.readFileSync(judgeMdPath, 'utf-8');
-          const parsed = matter(content);
-          
-          const validation = validateJudge(parsed.data);
-
-          judges.push({
-            id: entry.name,
-            name: validation.data?.name || parsed.data.name || entry.name,
-            description: validation.data?.description || parsed.data.description || '',
-            version: validation.data?.version || '',
-            mode: validation.data?.mode || 'one-shot',
-            timeout_seconds: validation.data?.timeout_seconds || 30,
-            instructions: parsed.content.trim(),
-            filePath: judgeMdPath,
-            isValid: validation.valid,
-            validationErrors: validation.errors,
-            validationWarnings: validation.warnings,
-          });
-        } catch (error: any) {
-          console.error(`Error parsing ${judgeMdPath}:`, error.message);
-        }
-      }
-    }
-  }
-
-  return judges;
+export interface JudgeSources {
+  legacyDirs: string[]; // <dir>/<id>/JUDGE.md
+  ruleDirs: string[];   // <dir>/<id>.md
 }
 
-export function discoverJudges(): Judge[] {
+const RULE_EXTENSION = '.md';
+
+export function discoverJudges(ruleDirs: string[] = []): Judge[] {
   const globalDir = path.join(os.homedir(), '.judge', 'judges');
   const localDir = path.join(process.cwd(), '.judge', 'judges');
+  return loadJudges({ legacyDirs: [globalDir, localDir], ruleDirs });
+}
 
-  const globalJudges = findJudgesInDir(globalDir);
-  const localJudges = findJudgesInDir(localDir);
+// Later sources override earlier ones with the same id: global, local, then each rule dir.
+export function loadJudges(sources: JudgeSources): Judge[] {
+  const judges = [
+    ...sources.legacyDirs.flatMap(findJudgeMdsInDir),
+    ...sources.ruleDirs.flatMap(findRulesInDir),
+  ];
+  return mergeById(judges);
+}
 
-  // We merge them. Local overrides global if they have the same ID (directory name).
+function findJudgeMdsInDir(baseDir: string): Judge[] {
+  if (!fs.existsSync(baseDir)) {
+    return [];
+  }
+
+  return fs.readdirSync(baseDir, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => ({ id: entry.name, filePath: path.join(baseDir, entry.name, 'JUDGE.md') }))
+    .filter(({ filePath }) => fs.existsSync(filePath))
+    .flatMap(({ id, filePath }) => loadJudgeFile(id, filePath, 'judge-md', validateJudge));
+}
+
+function findRulesInDir(baseDir: string): Judge[] {
+  if (!fs.existsSync(baseDir)) {
+    throw new Error(`Rules directory not found: ${baseDir}`);
+  }
+
+  return fs.readdirSync(baseDir, { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith(RULE_EXTENSION))
+    .map(entry => ({ id: path.basename(entry.name, RULE_EXTENSION), filePath: path.join(baseDir, entry.name) }))
+    .flatMap(({ id, filePath }) => loadJudgeFile(id, filePath, 'rule', data => validateRule(data, id)));
+}
+
+function loadJudgeFile(
+  id: string,
+  filePath: string,
+  format: Judge['format'],
+  validate: (data: any) => ValidationResult,
+): Judge[] {
+  try {
+    const parsed = matter(fs.readFileSync(filePath, 'utf-8'));
+    const validation = validate(parsed.data);
+    return [toJudge(id, filePath, format, parsed, validation)];
+  } catch (error: any) {
+    console.error(`Error parsing ${filePath}:`, error.message);
+    return [];
+  }
+}
+
+function toJudge(
+  id: string,
+  filePath: string,
+  format: Judge['format'],
+  parsed: matter.GrayMatterFile<string>,
+  validation: ValidationResult,
+): Judge {
+  const settings = validation.data ?? {
+    ...defaultSettings(),
+    name: parsed.data.name || id,
+    description: parsed.data.description || '',
+    version: '',
+  };
+
+  return {
+    ...settings,
+    id,
+    format,
+    instructions: parsed.content.trim(),
+    filePath,
+    isValid: validation.valid,
+    validationErrors: validation.errors,
+    validationWarnings: validation.warnings,
+  };
+}
+
+function mergeById(judges: Judge[]): Judge[] {
   const judgeMap = new Map<string, Judge>();
-  
-  for (const gj of globalJudges) {
-    judgeMap.set(gj.id, gj);
+  for (const judge of judges) {
+    judgeMap.set(judge.id, judge);
   }
-  for (const lj of localJudges) {
-    judgeMap.set(lj.id, lj);
-  }
-
-  const allJudges = Array.from(judgeMap.values());
-  const validJudges: Judge[] = [];
-
-  // Filter out invalid judges if we're not explicitly in checking mode.
-  // Actually, standard runs should just skip them and warn. The index.ts will decide what to print, but here we can just warn for invalid ones.
-  return allJudges;
+  return Array.from(judgeMap.values());
 }

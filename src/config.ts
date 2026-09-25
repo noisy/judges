@@ -20,6 +20,7 @@ export interface AppConfig {
   failOn?: string;
   lastCommit: boolean;
   engine: SupportedEngine;
+  ruleDirs: string[];
   command?: 'config';
   configAction?: 'check' | 'list' | 'show' | 'which';
   configTarget?: string;
@@ -27,7 +28,7 @@ export interface AppConfig {
 
 export function parseArgs(argv: string[]): AppConfig {
   const parsed = mri(argv, {
-    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which'],
+    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules'],
     boolean: ['json', 'help', 'version', 'short', 'full', 'staged', 'diff', 'last-commit', 'check', 'list'],
     alias: {
       f: 'file',
@@ -84,6 +85,8 @@ export function parseArgs(argv: string[]): AppConfig {
   let failOn = parsed['fail-on']?.toLowerCase();
   if (failOn === 'med') failOn = 'medium';
 
+  const ruleDirs = [parsed.rules ?? []].flat();
+
   const engine = ['codex', 'gemini'].includes(parsed.engine) ? parsed.engine as SupportedEngine : 'claude';
 
   return {
@@ -101,6 +104,7 @@ export function parseArgs(argv: string[]): AppConfig {
     failOn,
     lastCommit: !!parsed['last-commit'],
     engine,
+    ruleDirs,
     command,
     configAction,
     configTarget,
