@@ -30,7 +30,7 @@ async function main() {
     return;
   }
 
-  const judges = discoverJudges(config.ruleDirs);
+  const judges = loadJudgesOrExit(config);
 
   if (config.command === 'config') {
     if (config.configAction === 'check') {
@@ -106,6 +106,15 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+function loadJudgesOrExit(config: AppConfig): Judge[] {
+  try {
+    return discoverJudges(config.ruleDirs);
+  } catch (error: any) {
+    console.error(colors.red(`❌ Error: ${error.message}`));
+    process.exit(1);
+  }
+}
 
 function describeSettings(judge: Judge): string {
   if (judge.format === 'rule') {
