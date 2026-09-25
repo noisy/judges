@@ -58,7 +58,7 @@ async function evaluateJudge(judge: Judge, context: EvaluationContext, engine: S
   try {
     const prompt = constructPrompt(judge, context);
     const response = await getEngine(engine).run(buildEngineRequest(judge, prompt));
-    const issues = parseLLMOutput(response.rawOutput);
+    const issues = attributeToRule(judge, parseLLMOutput(response.rawOutput));
     return { status: 'ok', issues: sortBySeverity(issues), costUsd: response.costUsd, turns: response.turns };
   } catch (error: any) {
     const status = error instanceof TimeoutError ? 'timeout' : 'error';
@@ -75,6 +75,12 @@ export function buildEngineRequest(judge: Judge, prompt: string): EngineRequest 
     tools: judge.tools,
     maxTurns: judge.max_turns
   };
+}
+
+// A rule decides the severity of its findings; legacy judges keep what the model reported.
+export function attributeToRule(judge: Judge, issues: Issue[]): Issue[] {
+  if (judge.format !== 'rule') return issues;
+  return issues.map((issue) => ({ ...issue, rule_id: judge.id, severity: judge.severity }));
 }
 
 function sortBySeverity(issues: Issue[]): Issue[] {

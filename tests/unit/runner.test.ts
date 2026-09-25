@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { runPlan, buildEngineRequest } from '../../src/runner.js';
+import { runPlan, buildEngineRequest, attributeToRule } from '../../src/runner.js';
 import { getEngine, Engine, TimeoutError } from '../../src/engines/index.js';
 import { Judge } from '../../src/judges.js';
 import { PlanItem } from '../../src/plan.js';
@@ -160,5 +160,34 @@ describe('buildEngineRequest', () => {
       tools: ['Read'],
       maxTurns: 4
     });
+  });
+});
+
+describe('attributeToRule', () => {
+  const issues = [{ file: 'a.ts', line: 1, severity: 'medium' as const, message: 'msg', rule_id: 'made-up' }];
+
+  it('stamps rule issues with the rule id and the rule severity', () => {
+    const rule = { id: 'booleans-read-as-questions', format: 'rule', severity: 'low' } as Judge;
+
+    expect(attributeToRule(rule, issues)).toEqual([
+      { file: 'a.ts', line: 1, severity: 'low', message: 'msg', rule_id: 'booleans-read-as-questions' }
+    ]);
+  });
+
+  it('keeps the model severity for legacy JUDGE.md judges', () => {
+    const legacy = { id: 'srp', format: 'judge-md', severity: 'low' } as Judge;
+
+    expect(attributeToRule(legacy, issues)).toEqual(issues);
+  });
+
+  it('applies the rule severity to engine results', async () => {
+    const rule = { ...judge, format: 'rule', severity: 'high' } as Judge;
+    run.mockReset();
+    run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
+    vi.mocked(getEngine).mockReturnValue({ name: 'claude', isAvailable: () => true, run });
+
+    const [result] = await runPlan([{ judge: rule, context: inputContext }], 'claude');
+
+    expect(result.issues[0]).toEqual(expect.objectContaining({ severity: 'high', rule_id: 'srp' }));
   });
 });
