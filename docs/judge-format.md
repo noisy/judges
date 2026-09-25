@@ -61,7 +61,7 @@ A rule is a flat Markdown file `<dir>/<id>.md`, loaded from every directory pass
 | `model` | `string` | No | engine default | Alias (`small`, `medium`, `large`) or an exact model id. |
 | `budget` | `string` | No | - | Time and cost caps, e.g. `30s, $0.10` or `2m`. Either part is optional. The time part sets `timeout_seconds`; setting both is an error. |
 | `mode` | `'one-shot' \| 'agent'` | No | `'one-shot'` | Same as for `JUDGE.md`. |
-| `tools` | `string[]` | No | agent: `[Read, Grep, Glob]` | Only with `mode: agent`. Read-only tools only: `Read`, `Grep`, `Glob`, `LS`. |
+| `tools` | `string[]` | No | agent: `[Read, Grep, Glob]` | Only with `mode: agent`. Read-only tools only: `Read`, `Grep`, `Glob`. |
 | `allow_read` | `string[]` | No | `[]` | Only with `mode: agent`. Directories outside the repo the judge may read. See [Reading outside the repo](#reading-outside-the-repo). |
 | `max_turns` | `number` | No | agent: `8` | Turn cap. Must be a positive integer. |
 | `timeout_seconds` | `number` | No | `30`, agent: `120` | Same as for `JUDGE.md`. |
@@ -104,7 +104,7 @@ Intent: every connector has an integration test.
 ```
 
 - **Defaults.** `tools: [Read, Grep, Glob]`, `max_turns: 8`, and a 120 s timeout when neither `budget` nor `timeout_seconds` sets one.
-- **Validation.** `tools` on a one-shot judge is an error. A tool outside `Read`, `Grep`, `Glob`, `LS` is an error on any judge: judges are read-only by construction.
+- **Validation.** `tools` on a one-shot judge is an error. A tool outside `Read`, `Grep`, `Glob` is an error on any judge: judges are read-only by construction.
 - **Engines.** Only `claude` runs agent judges. `codex` and `gemini` report the judge as an error, `agent mode not supported by <engine>`, never a silent one-shot run.
 - **Working directory.** The repository root: the git root, or `--root <dir>`. File paths are shown relative to it. One-shot judges run in a temp dir, so no repository `CLAUDE.md` reaches them.
 - **Committed content.** The files in the prompt are what is being committed (the staged content in `--staged` mode). The judge is told the files on disk may differ.

@@ -98,12 +98,10 @@ export function examinedSummary(examined: ExaminedTarget[]): string {
   const allowed = examined.filter(e => !e.denied);
   const reads = new Set(allowed.filter(e => e.tool === 'Read').map(e => e.target)).size;
   const searches = allowed.filter(e => e.tool === 'Grep' || e.tool === 'Glob').length;
-  const listings = allowed.filter(e => e.tool === 'LS').length;
   const denied = examined.length - allowed.length;
   return [
     reads > 0 ? `read ${reads} ${reads === 1 ? 'file' : 'files'}` : '',
     searches > 0 ? `${searches} ${searches === 1 ? 'search' : 'searches'}` : '',
-    listings > 0 ? `${listings} ${listings === 1 ? 'listing' : 'listings'}` : '',
     denied > 0 ? `${denied} denied by the sandbox` : ''
   ].filter(Boolean).join(', ');
 }

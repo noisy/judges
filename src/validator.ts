@@ -19,7 +19,7 @@ const DEFAULT_AGENT_TIMEOUT_SECONDS = 120;
 const DEFAULT_AGENT_TOOLS: string[] = ['Read', 'Grep', 'Glob'];
 const DEFAULT_AGENT_MAX_TURNS = 8;
 // Judges are read-only by construction: no tool that writes, runs code or reaches the network.
-export const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob', 'LS'] as const;
+export const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob'] as const;
 const SECONDS_PER_UNIT: Record<string, number> = { s: 1, m: 60 };
 // A directory outside the repo, whole: `../billing-service`, `../billing-service/**`, `/abs/dir/**`, `~/dir/**`.
 // The sandbox grants whole directories, so a narrower glob would promise less than it grants.

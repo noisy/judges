@@ -146,7 +146,7 @@ function examinedTargets(events: CliEvent[], envelope: CliEvent, cwd?: string): 
     });
 }
 
-// Read and LS name a path; Grep and Glob a pattern, optionally within a path.
+// Read names a path; Grep and Glob a pattern, optionally within a path.
 function describeTarget(input: CliEvent, cwd?: string): string {
   const where = input.file_path ?? input.path;
   const shownPath = typeof where === 'string' ? relativeToRoot(where, cwd) : undefined;

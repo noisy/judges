@@ -201,10 +201,10 @@ describe('mode and tools', () => {
     expect(result.errors).toContain('error: `tools` is only allowed with `mode: agent`');
   });
 
-  it.each(['Write', 'Edit', 'Bash', 'WebFetch'])('rejects the non-read-only tool %s on any rule', (tool) => {
+  it.each(['Write', 'Edit', 'Bash', 'WebFetch', 'LS'])('rejects the non-read-only tool %s on any rule', (tool) => {
     const result = validateRule({ id: 'r', mode: 'agent', tools: ['Read', tool] }, 'r');
     expect(result.valid).toBe(false);
-    expect(result.errors[0]).toContain('`tools` entries must be read-only tools: Read, Grep, Glob, LS');
+    expect(result.errors[0]).toContain('`tools` entries must be read-only tools: Read, Grep, Glob');
   });
 
   it('rejects an empty tool list for an agent', () => {
