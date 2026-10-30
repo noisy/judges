@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { EvaluationContext } from './types.js';
 import { repoRoot } from './files.js';
 import * as fs from 'fs';
@@ -71,41 +71,41 @@ function warnIfDiffIsLarge(stats: { filesChanged: number, linesChanged: number }
 }
 
 function parseModifiedFiles(command: string, mode: 'staged' | 'diff' | 'head' | 'last-commit'): { path: string, content: string }[] {
-  const gitStatusOutput = getModifiedFileEntries(command);
   const files: { path: string, content: string }[] = [];
-  
-  if (!gitStatusOutput) return files;
-  
-  const lines = gitStatusOutput.split('\n').filter(l => l.trim());
   const root = repoRoot();
-  for (const line of lines) {
-    const parsed = parseNameStatusLine(line);
-    if (!parsed) continue;
+  for (const entry of parseNameStatus(getModifiedFileEntries(command))) {
+    if (entry.status === 'D') continue;
 
-    const content = loadFileContent(parsed.filePath, mode, root);
+    const content = loadFileContent(entry.filePath, mode, root);
     if (content !== null) {
-      files.push({ path: parsed.filePath, content });
+      files.push({ path: entry.filePath, content });
     }
   }
   return files;
 }
 
+// -z keeps git from quoting names with spaces or non-ASCII characters, and no shell sees them.
 function getModifiedFileEntries(command: string): string {
-  const nameStatusCmd = command.replace('git diff', 'git diff --name-status');
+  const [, , ...revisions] = command.split(' ');
   try {
-    return execSync(nameStatusCmd, { encoding: 'utf-8' });
+    return execFileSync('git', ['diff', '--name-status', '-z', ...revisions], { encoding: 'utf-8' });
   } catch (err) {
     return '';
   }
 }
 
-function parseNameStatusLine(line: string): { status: string, filePath: string } | null {
-  const parts = line.split('\t');
-  const status = parts[0][0]; 
-  if (status === 'D') return null; 
-  
-  const filePath = parts[parts.length - 1];
-  return { status, filePath };
+// Each entry is a status and its path, or a status and two paths (from, to) for a rename or a copy.
+function parseNameStatus(output: string): { status: string, filePath: string }[] {
+  const fields = output.split('\0');
+  const entries: { status: string, filePath: string }[] = [];
+  let i = 0;
+  while (fields[i]) {
+    const status = fields[i][0];
+    const pathCount = status === 'R' || status === 'C' ? 2 : 1;
+    entries.push({ status, filePath: fields[i + pathCount] });
+    i += pathCount + 1;
+  }
+  return entries;
 }
 
 // Git reports paths relative to the repository root, so the working-tree copy is read from there, not from cwd.
@@ -128,5 +128,5 @@ function loadFileContent(filePath: string, mode: 'staged' | 'diff' | 'head' | 'l
 
 function readFromGitTree(filePath: string, mode: 'staged' | 'last-commit'): string {
   const target = mode === 'staged' ? `:${filePath}` : `HEAD:${filePath}`;
-  return execSync(`git show ${target}`, { encoding: 'utf-8' });
+  return execFileSync('git', ['show', target], { encoding: 'utf-8' });
 }
