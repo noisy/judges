@@ -4,8 +4,9 @@ import { parseLLMOutput } from '../../src/llm.js';
 import { Judge } from '../../src/judges.js';
 import { EvaluationContext } from '../../src/types.js';
 
-const oneShot = { id: 'r', name: 'r', mode: 'one-shot', instructions: 'Intent: be good.' } as Judge;
-const agent = { ...oneShot, mode: 'agent' } as Judge;
+const oneShot = { id: 'r', name: 'r', context: 'file', mode: 'one-shot', instructions: 'Intent: be good.' } as Judge;
+const diffOnly = { ...oneShot, context: 'diff' } as Judge;
+const agent = { ...oneShot, context: 'repo', mode: 'agent' } as Judge;
 
 const filesContext: EvaluationContext = {
   type: 'files',
@@ -50,6 +51,24 @@ describe('constructPrompt', () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(prompt).toContain('Report only violations in the changed files in scope. Finish with the JSON array only.');
     expect(prompt).toContain('the files on disk may differ');
+  });
+
+  it('gives a diff rule the diff but not the whole files', () => {
+    const prompt = constructPrompt(diffOnly, diffContext);
+    expect(prompt).toContain('# Diff');
+    expect(prompt).toContain('Only the diff is shown, not the whole files.');
+    expect(prompt).not.toContain('## src/connectors/beta.py');
+    expect(prompt).not.toContain('return requests.get(URL)');
+  });
+
+  it('gives a diff rule the whole files when there is no diff, as a file rule', () => {
+    expect(constructPrompt(diffOnly, filesContext)).toBe(constructPrompt(oneShot, filesContext));
+  });
+
+  it('gives a file rule the diff and the whole files', () => {
+    const prompt = constructPrompt(oneShot, diffContext);
+    expect(prompt).toContain('# Diff');
+    expect(prompt).toContain('4|     return requests.get(URL)');
   });
 
   it('leaves parsing of the model answer unaffected by the numbered listing', () => {
