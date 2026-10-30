@@ -146,11 +146,11 @@ function loadJudgesOrExit(config: AppConfig): { loaded: Judge[]; selected: Judge
 
 // Runs each rule on its fixtures; the exit code says whether every fixture passed.
 async function runRuleTests(judges: Judge[], config: AppConfig): Promise<void> {
-  if (judges.length === 0) {
-    console.error(colors.red('❌ Error: no valid rules to test; pass a rules directory with --rules <dir>'));
+  const entries = await testRules(judges, config.engine);
+  if (entries.length === 0) {
+    console.error(colors.red('❌ Error: no valid rule files to test; pass a rules directory with --rules <dir>'));
     process.exit(TEST_USAGE_EXIT_CODE);
   }
-  const entries = await testRules(judges, config.engine);
   console.log(config.json ? JSON.stringify(entries, null, 2) : formatTestResults(entries));
   // Not process.exit: it can cut off a long report still being written to a pipe.
   process.exitCode = testExitCode(entries);
