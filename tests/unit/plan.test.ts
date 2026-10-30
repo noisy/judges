@@ -13,7 +13,7 @@ const context: EvaluationContext = {
 };
 
 function judge(overrides: Partial<Judge> = {}): Judge {
-  return { ...defaultSettings(), id: 'rule', ...overrides } as Judge;
+  return { ...defaultSettings(), id: 'rule', isValid: true, validationErrors: [], ...overrides } as Judge;
 }
 
 describe('buildPlan', () => {
@@ -27,6 +27,14 @@ describe('buildPlan', () => {
     const [item] = buildPlan([judge({ scope: ['docs/**'] })], context);
 
     expect(item).toEqual(expect.objectContaining({ skip: SKIP_NO_FILES_IN_SCOPE }));
+  });
+
+  it('marks an invalid rule with its validation errors instead of running it', () => {
+    const invalid = judge({ isValid: false, validationErrors: ['severity: unknown value', 'model: unknown'] });
+
+    const [item] = buildPlan([invalid], context);
+
+    expect(item).toEqual({ judge: invalid, invalid: 'invalid rule: severity: unknown value; model: unknown' });
   });
 
   it('skips a deterministic check without scoping it', () => {

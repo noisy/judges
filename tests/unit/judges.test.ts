@@ -103,6 +103,14 @@ describe('loadJudges', () => {
     expect(rule).toMatchObject({ name: 'booleans', timeout_seconds: 30, severity: 'medium' });
   });
 
+  it('keeps a rule whose frontmatter is not valid YAML, marked invalid', () => {
+    const rulesDir = writeFile('rules/booleans.md', '---\nid: booleans\nscope: ["src/**\n---\nBody.');
+    const [rule] = loadJudges({ legacyDirs: [], ruleDirs: [rulesDir] });
+
+    expect(rule).toMatchObject({ id: 'booleans', isValid: false });
+    expect(rule.validationErrors.join(' ')).toContain('cannot read the frontmatter');
+  });
+
   it('loads a deterministic rule with a command and no body', () => {
     const rulesDir = writeFile('rules/lint.md', '---\nid: lint\ncheck: deterministic\ncommand: npm run lint\n---\n');
     const [rule] = loadJudges({ legacyDirs: [], ruleDirs: [rulesDir] });

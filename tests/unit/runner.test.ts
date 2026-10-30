@@ -192,6 +192,18 @@ describe('runPlan progress and skips', () => {
     expect(events).toEqual([{ judgeId: 'srp', state: 'done', result }]);
   });
 
+  it('returns an error result for an invalid rule without calling the engine', async () => {
+    const [result] = await runPlan([{ judge, invalid: 'invalid rule: severity: unknown value' }], 'claude');
+
+    expect(run).not.toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({
+      judgeId: 'srp',
+      status: 'error',
+      error: 'invalid rule: severity: unknown value',
+      issues: []
+    }));
+  });
+
   it('keeps plan order when skipped and executed judges are mixed', async () => {
     run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
     const skippedJudge = { ...judge, id: 'deterministic-one' } as Judge;

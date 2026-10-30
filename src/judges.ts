@@ -100,8 +100,9 @@ function loadJudgeFile(
     const validation = validate(parsed.data);
     return [toJudge(id, filePath, format, parsed, validation)];
   } catch (error: any) {
-    console.error(`Error parsing ${filePath}:`, error.message);
-    return [];
+    // A rule that cannot be read is kept as invalid, so the report shows it instead of leaving it out.
+    const unreadable = { valid: false, errors: [`cannot read the frontmatter: ${error.message}`], warnings: [] };
+    return [toJudge(id, filePath, format, { data: {}, content: '' } as matter.GrayMatterFile<string>, unreadable)];
   }
 }
 
