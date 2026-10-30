@@ -19,6 +19,7 @@ export interface AppConfig {
   visibleIssueLimit: number;
   failOn?: string;
   lastCommit: boolean;
+  base?: string;
   engine: SupportedEngine;
   ruleDirs: string[];
   only: string[];
@@ -29,17 +30,24 @@ export interface AppConfig {
 }
 
 export const ROOT_NEEDS_FILE_INPUT = '--root is only supported with file input';
+export const BASE_NEEDS_REF = '--base needs a ref, for example --base main';
+
+export const USAGE_ERROR_EXIT_CODE = 2;
+
+// A mistake in how the tool was called, found before any rule runs.
+export class UsageError extends Error {}
 
 // Diff paths are relative to the git root, so a different root would not match them.
 export function inputUsageError(config: AppConfig): string | undefined {
   const hasFileInput = config.paths.length > 0 || config.file !== undefined;
   if (config.command === undefined && config.root !== undefined && !hasFileInput) return ROOT_NEEDS_FILE_INPUT;
+  if (config.base === '') return BASE_NEEDS_REF;
   return undefined;
 }
 
 export function parseArgs(argv: string[]): AppConfig {
   const parsed = mri(argv, {
-    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules', 'only', 'root'],
+    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules', 'only', 'root', 'base'],
     boolean: ['json', 'help', 'version', 'short', 'full', 'staged', 'diff', 'last-commit', 'check', 'list'],
     alias: {
       f: 'file',
@@ -87,13 +95,14 @@ export function parseArgs(argv: string[]): AppConfig {
     }
   }
 
-  if (command === undefined && paths.length > 0 && (parsed.staged || parsed.diff || parsed['last-commit'])) {
-    console.warn("Warning: Positional paths and git diff flags (--staged, --diff, --last-commit) were both provided. Falling back to paths.");
+  const hasBase = parsed.base !== undefined;
+  if (command === undefined && paths.length > 0 && (parsed.staged || parsed.diff || parsed['last-commit'] || hasBase)) {
+    console.warn("Warning: Positional paths and git diff flags (--staged, --diff, --last-commit, --base) were both provided. Falling back to paths.");
   }
   
-  const activeDiffFlags = [parsed.staged, parsed.diff, parsed['last-commit']].filter(Boolean).length;
+  const activeDiffFlags = [parsed.staged, parsed.diff, parsed['last-commit'], hasBase].filter(Boolean).length;
   if (activeDiffFlags > 1) {
-    console.warn("Warning: Multiple git diff flags provided (--staged, --diff, --last-commit). Defaulting to the most strict requirement.");
+    console.warn("Warning: Multiple git diff flags provided (--staged, --diff, --last-commit, --base). Defaulting to the most strict requirement.");
   }
   
   let failOn = parsed['fail-on']?.toLowerCase();
@@ -118,6 +127,7 @@ export function parseArgs(argv: string[]): AppConfig {
     visibleIssueLimit,
     failOn,
     lastCommit: !!parsed['last-commit'],
+    base: hasBase ? [parsed.base].flat().pop() : undefined, // the last --base wins when it is repeated
     engine,
     ruleDirs,
     only,

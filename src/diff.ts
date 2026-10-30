@@ -1,19 +1,23 @@
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { EvaluationContext } from './types.js';
 import { repoRoot } from './files.js';
+import { UsageError } from './config.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
 const MAX_DIFF_FILES_WARNING_THRESHOLD = 10;
 const MAX_DIFF_LINES_WARNING_THRESHOLD = 500;
 
-export function extractDiff(mode: 'staged' | 'diff' | 'head' | 'last-commit' = 'head'): EvaluationContext {
+export type DiffMode = 'staged' | 'diff' | 'head' | 'last-commit' | 'base';
+
+// `baseRef` is the ref given to --base; the other modes ignore it.
+export function extractDiff(mode: DiffMode = 'head', baseRef?: string): EvaluationContext {
   try {
-    const command = buildDiffCommand(mode);
+    const command = buildDiffCommand(mode, baseRef);
     const diff = runDiffCommand(command, mode);
     
     if (!diff.trim()) {
-      throw new Error(`No git diff found (${command}). Make sure you have uncommitted changes or use path mode (e.g., 'judge .').`);
+      throw emptyDiffError(command, mode, baseRef);
     }
 
     const files = parseModifiedFiles(command, mode);
@@ -28,6 +32,7 @@ export function extractDiff(mode: 'staged' | 'diff' | 'head' | 'last-commit' = '
       stats
     };
   } catch (error: any) {
+    if (error instanceof UsageError) throw error;
     if (error.message.includes('fatal: ')) {
       throw new Error(`Git error: ${error.message}`);
     }
@@ -35,14 +40,32 @@ export function extractDiff(mode: 'staged' | 'diff' | 'head' | 'last-commit' = '
   }
 }
 
-function buildDiffCommand(mode: 'staged' | 'diff' | 'head' | 'last-commit'): string {
+function buildDiffCommand(mode: DiffMode, baseRef?: string): string {
   if (mode === 'staged') return 'git diff --cached';
   if (mode === 'diff') return 'git diff';
   if (mode === 'last-commit') return 'git diff HEAD~1 HEAD';
+  if (mode === 'base') return `git diff ${resolveBaseCommit(baseRef ?? '')}...HEAD`;
   return 'git diff HEAD';
 }
 
-function runDiffCommand(command: string, mode: 'staged' | 'diff' | 'head' | 'last-commit'): string {
+// The ref goes into a shell command, so only its commit id is used there. A ref that does not resolve is never
+// replaced by another base: the review would show a different change than the one asked for.
+function resolveBaseCommit(ref: string): string {
+  try {
+    return execFileSync('git', ['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`], { encoding: 'utf-8' }).trim();
+  } catch {
+    throw new UsageError(`Unknown base ref '${ref}': it does not name a commit. In a shallow clone, fetch it first.`);
+  }
+}
+
+function emptyDiffError(command: string, mode: DiffMode, baseRef?: string): Error {
+  if (mode === 'base') {
+    return new UsageError(`No changes on this branch since it left '${baseRef}' (${command}).`);
+  }
+  return new Error(`No git diff found (${command}). Make sure you have uncommitted changes or use path mode (e.g., 'judge .').`);
+}
+
+function runDiffCommand(command: string, mode: DiffMode): string {
   try {
     return execSync(command, { encoding: 'utf-8' });
   } catch (cmdError: any) {
@@ -50,7 +73,7 @@ function runDiffCommand(command: string, mode: 'staged' | 'diff' | 'head' | 'las
   }
 }
 
-function handleLastCommitFallback(error: any, mode: 'staged' | 'diff' | 'head' | 'last-commit'): string {
+function handleLastCommitFallback(error: any, mode: DiffMode): string {
   if (mode === 'last-commit' && error.message.includes('fatal: ')) {
     return execSync('git show HEAD --format=""', { encoding: 'utf-8' });
   }
@@ -70,7 +93,7 @@ function warnIfDiffIsLarge(stats: { filesChanged: number, linesChanged: number }
   }
 }
 
-function parseModifiedFiles(command: string, mode: 'staged' | 'diff' | 'head' | 'last-commit'): { path: string, content: string }[] {
+function parseModifiedFiles(command: string, mode: DiffMode): { path: string, content: string }[] {
   const gitStatusOutput = getModifiedFileEntries(command);
   const files: { path: string, content: string }[] = [];
   
@@ -110,9 +133,9 @@ function parseNameStatusLine(line: string): { status: string, filePath: string }
 
 // Git reports paths relative to the repository root, so the working-tree copy is read from there, not from cwd.
 // The tree specs `:<path>` and `HEAD:<path>` are root-relative too (only `./` makes them cwd-relative).
-function loadFileContent(filePath: string, mode: 'staged' | 'diff' | 'head' | 'last-commit', root: string): string | null {
+function loadFileContent(filePath: string, mode: DiffMode, root: string): string | null {
   try {
-    if (mode === 'staged' || mode === 'last-commit') {
+    if (mode === 'staged' || mode === 'last-commit' || mode === 'base') {
       return readFromGitTree(filePath, mode);
     } else {
       const fullPath = path.resolve(root, filePath);
@@ -126,7 +149,7 @@ function loadFileContent(filePath: string, mode: 'staged' | 'diff' | 'head' | 'l
   return null;
 }
 
-function readFromGitTree(filePath: string, mode: 'staged' | 'last-commit'): string {
+function readFromGitTree(filePath: string, mode: 'staged' | 'last-commit' | 'base'): string {
   const target = mode === 'staged' ? `:${filePath}` : `HEAD:${filePath}`;
   return execSync(`git show ${target}`, { encoding: 'utf-8' });
 }

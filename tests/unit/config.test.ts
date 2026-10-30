@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseArgs, inputUsageError, ROOT_NEEDS_FILE_INPUT } from '../../src/config.js';
+import { parseArgs, inputUsageError, ROOT_NEEDS_FILE_INPUT, BASE_NEEDS_REF } from '../../src/config.js';
 
 describe('CLI Configuration Parsing', () => {
   it('should parse default boolean flags correctly', () => {
@@ -67,6 +67,13 @@ describe('CLI Configuration Parsing', () => {
     expect(args.engine).toBe('claude'); // Fallback to default
   });
 
+  it('should parse the --base ref, the last one winning when repeated', () => {
+    expect(parseArgs([]).base).toBeUndefined();
+    expect(parseArgs(['--base', 'origin/main']).base).toBe('origin/main');
+    expect(parseArgs(['--base=HEAD~1']).base).toBe('HEAD~1');
+    expect(parseArgs(['--base', 'main', '--base', 'develop']).base).toBe('develop');
+  });
+
   it('should collect repeatable --rules directories', () => {
     expect(parseArgs([]).ruleDirs).toEqual([]);
     expect(parseArgs(['--rules', 'rules']).ruleDirs).toEqual(['rules']);
@@ -76,7 +83,7 @@ describe('CLI Configuration Parsing', () => {
 
 describe('inputUsageError', () => {
   it.each([[['--root', 'fixture']], [['--root', 'fixture', '--staged']], [['--root', 'fixture', '--diff']],
-    [['--root', 'fixture', '--last-commit']]])('rejects --root with diff input: %j', (argv) => {
+    [['--root', 'fixture', '--last-commit']], [['--root', 'fixture', '--base', 'main']]])('rejects --root with diff input: %j', (argv) => {
     expect(inputUsageError(parseArgs(argv))).toBe(ROOT_NEEDS_FILE_INPUT);
   });
 
@@ -85,5 +92,9 @@ describe('inputUsageError', () => {
     expect(inputUsageError(parseArgs(['--root', 'fixture', '-f', 'fixture/src/a.py']))).toBeUndefined();
     expect(inputUsageError(parseArgs(['--staged']))).toBeUndefined();
   });
-});
 
+  it('rejects --base without a ref', () => {
+    expect(inputUsageError(parseArgs(['--base']))).toBe(BASE_NEEDS_REF);
+    expect(inputUsageError(parseArgs(['--base', 'main']))).toBeUndefined();
+  });
+});

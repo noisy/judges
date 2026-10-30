@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { parseArgs, inputUsageError, AppConfig } from './config.js';
+import { parseArgs, inputUsageError, AppConfig, UsageError, USAGE_ERROR_EXIT_CODE } from './config.js';
 import { extractDiff } from './diff.js';
 import { resolvePaths, readContents, repoRoot } from './files.js';
 import { discoverJudges, selectJudges, Judge } from './judges.js';
@@ -98,6 +98,11 @@ async function main() {
   try {
     inputContext = resolveInputContext(config);
   } catch (error: any) {
+    // A usage error is reported even with --json: there is no report to carry it.
+    if (error instanceof UsageError) {
+      console.error(colors.red(`❌ Error: ${error.message}`));
+      process.exit(USAGE_ERROR_EXIT_CODE);
+    }
     if (!config.json) {
       console.error(colors.red(`\n❌ Error: ${error.message}\n`));
     }
@@ -175,6 +180,8 @@ function readInput(config: AppConfig, root: string): EvaluationContext {
     return extractDiff('diff');
   } else if (config.lastCommit) {
     return extractDiff('last-commit');
+  } else if (config.base !== undefined) {
+    return extractDiff('base', config.base);
   }
 
   return extractDiff('head');
@@ -235,6 +242,7 @@ Options:
   --rules <dir> Load flat rule files (<dir>/<id>.md); repeatable, overrides judges with the same id
   --only <id>  Run only the named judge or rule; repeatable
   --root <dir> Repository root agent judges explore (default: the git root); file input only
+  --base <ref> Review the branch's commits since it left <ref> (git diff <ref>...HEAD)
   --help, -h   Show this help message
   --version, -v Show the version number
   `);
