@@ -15,7 +15,7 @@ const SAYS_NO_VIOLATION = [
 const NOT_NEGATED = String.raw`(?<!\b(?:no|not|never)\b[^.;:,]*)`;
 const STILL_COMPLAINS = [
   new RegExp(String.raw`${NOT_NEGATED}\b(?:replace|rename|remove|delete|add|move|split|extract|use|return|raise|throw|say|tell)\b`, 'i'),
-  /\bshould\b(?!(?: not)? be (?:flagged|reported|disregarded|ignored))/i,
+  /(?<!\bthis (?:entry|finding|line) )\bshould\b(?!(?: not)? be (?:flagged|reported|disregarded|ignored))/i,
   new RegExp(String.raw`${NOT_NEGATED}\b(?:must|instead|missing|lacks?|vague|unclear|restates?|violates|breaks)\b`, 'i'),
   /\b(?:does|do|did)(?: not|n't)\b/i
 ];

@@ -11,7 +11,9 @@ const SAYS_NO_VIOLATION = [
   "The comment explains the reason for the 119-day value (the network's 120-day limit minus a safety day), so it is acceptable. However, it sits above the constant rather than being inline, which is fine. No restatement issue here; keeping this as a note only if you want to tighten wording. Consider no change.",
   'The comment `# Cents, not euros: the card API counts in the smallest unit.` does explain a unit, so it is a valid comment. No issue here; however, note that the function `refundable_cents` is below it and the comment correctly explains the unit meaning. (Reporting only violations: this entry should be disregarded.)',
   'The comment on line 7 explains why the window is 119 days rather than 120, which is valid. No issue there. However, the comment on line 11 (`# Cents, not euros: the card API counts in the smallest unit.`) is a reason/unit note and is acceptable. Re-checking: no comment here merely restates the code, so this entry should not be reported. Please disregard.',
-  "The comment 'Cents, not euros: the card API counts in the smallest unit.' tells a unit and a reason, so it is acceptable. Consider no change."
+  "The comment 'Cents, not euros: the card API counts in the smallest unit.' tells a unit and a reason, so it is acceptable. Consider no change.",
+  // S25/L4-numbers-long-clean.
+  'The literal `30` in `timedelta(minutes=SLOT_MINUTES)` is fine since it uses the constant, but `datetime.combine`-related code is fine too. On closer review no violation here; this entry should not exist.'
 ];
 
 const REAL_FINDINGS = [
