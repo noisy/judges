@@ -4,11 +4,12 @@ import { constructPrompt } from './prompt.js';
 import { Judge, displayName } from './judges.js';
 import { PlanItem } from './plan.js';
 import { Marker, isCovered } from './markers.js';
+import { dropOutsideDiff } from './diff-lines.js';
 import { SEVERITY_SCORE } from './config.js';
 import { repoRoot } from './files.js';
 import { EvaluationContext, Issue, JudgeEvent, JudgeResult, SupportedEngine } from './types.js';
 
-type JudgeOutcome = Pick<JudgeResult, 'status' | 'issues' | 'suppressed' | 'error' | 'costUsd' | 'turns' | 'examined'>;
+type JudgeOutcome = Pick<JudgeResult, 'status' | 'issues' | 'suppressed' | 'outsideDiff' | 'error' | 'costUsd' | 'turns' | 'examined'>;
 export type ProgressListener = (event: JudgeEvent) => void;
 
 export async function runPlan(
@@ -47,6 +48,7 @@ async function runJudge(
     status: outcome.status,
     issues: outcome.issues,
     suppressed: outcome.suppressed,
+    outsideDiff: outcome.outsideDiff,
     durationMs: Date.now() - startedAt,
     costUsd: outcome.costUsd,
     turns: outcome.turns,
@@ -71,8 +73,9 @@ async function evaluateJudge(
     const response = await getEngine(engine).run(buildEngineRequest(judge, prompt, context.root ?? repoRoot()));
     const issues = attributeToRule(judge, parseLLMOutput(response.rawOutput));
     const { kept, suppressed } = dropCovered(judge, issues, markers);
-    return { status: 'ok', issues: sortBySeverity(kept), suppressed, costUsd: response.costUsd, turns: response.turns,
-      examined: response.examined };
+    const { kept: inChange, outsideDiff } = dropOldFindings(judge, kept, context);
+    return { status: 'ok', issues: sortBySeverity(inChange), suppressed, outsideDiff, costUsd: response.costUsd,
+      turns: response.turns, examined: response.examined };
   } catch (error: any) {
     const status = error instanceof TimeoutError ? 'timeout' : 'error';
     return { status, issues: [], error: error.message };
@@ -103,6 +106,17 @@ export function attributeToRule(judge: Judge, issues: Issue[]): Issue[] {
 export function dropCovered(judge: Judge, issues: Issue[], markers: Marker[]): { kept: Issue[]; suppressed: number } {
   const kept = issues.filter((issue) => !isCovered(markers, judge.id, issue.file, issue.line));
   return { kept, suppressed: issues.length - kept.length };
+}
+
+// On a diff, only what the change added is reported. Agent judges are left alone: they may rightly report
+// an untouched caller that the change breaks.
+export function dropOldFindings(
+  judge: Judge,
+  issues: Issue[],
+  context: EvaluationContext
+): { kept: Issue[]; outsideDiff?: number } {
+  if (context.rawDiff === undefined || judge.mode === 'agent') return { kept: issues };
+  return dropOutsideDiff(issues, context.rawDiff);
 }
 
 function sortBySeverity(issues: Issue[]): Issue[] {
