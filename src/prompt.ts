@@ -1,5 +1,5 @@
 import { Judge } from './judges.js';
-import { Marker } from './markers.js';
+import { Marker, markerPlace } from './markers.js';
 import { EvaluationContext } from './types.js';
 
 const LINE_NUMBER_SEPARATOR = '| ';
@@ -101,7 +101,7 @@ function fileBlocks(inputContext: EvaluationContext): string {
     .join('');
 }
 
-// "  7| code": models report off-by-one lines without them, and marker suppression matches on lines.
+// "  7| code": models report off-by-one lines without them.
 export function numberLines(content: string): string {
   const lines = content.split('\n');
   if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
@@ -109,16 +109,15 @@ export function numberLines(content: string): string {
   return lines.map((line, index) => `${String(index + 1).padStart(width)}${LINE_NUMBER_SEPARATOR}${line}`).join('\n');
 }
 
-// The judge contract: marked places are accounted for, so the judge need not report them.
+// The judge decides what each marker covers, and says so, so a covered violation is listed rather than hidden.
 export function markersSection(markers: Marker[]): string {
   if (markers.length === 0) return '';
-  const entries = markers.map((marker) => `- ${markerLocation(marker)} (rule-${marker.kind}): ${marker.reason}`);
-  return `Markers (accounted for, do not report findings at these places):
+  const entries = markers.map((marker) => `- ${markerPlace(marker)} (rule-${marker.kind}): ${marker.reason}`);
+  return `Markers: the team marked some places as known exceptions (rule-exception) or known debt (rule-debt) for this rule. Each marker is listed at its place, <file>:<line> of the marker comment, with its reason:
 ${entries.join('\n')}
+Read each marker and decide what it covers: a line, a block, a function or a whole file, as its reason says. It may be about code above it, such as the function its docstring belongs to, or several lines below it.
+List every violation, also the ones a marker accounts for. Give each violation a marker accounts for one more field: "covered_by": "<the marker's place, as listed above>". It is then left out of the report and shown with the marker that covered it.
+Report every other violation as usual, without "covered_by", even right next to a marker: a marker covers only what its reason is about.
 
 `;
-}
-
-function markerLocation(marker: Marker): string {
-  return marker.scope === 'file' ? `${marker.file} (whole file)` : `${marker.file}:${marker.scope.line}`;
 }

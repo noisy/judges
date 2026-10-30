@@ -1,87 +1,151 @@
 import { describe, it, expect } from 'vitest';
-import { findMarkers, isCovered, parseLineRange, Marker } from '../../src/markers.js';
+import { findMarkers, markerPlace, namedMarker, parseLineRange, Marker } from '../../src/markers.js';
 
 function lines(...content: string[]): string {
   return content.join('\n');
 }
 
+function reasons(content: string): Array<string | undefined> {
+  return findMarkers('a.ts', content).map((marker) => marker.reason);
+}
+
 describe('findMarkers', () => {
   it.each([
-    ['#', '# rule-ignore: my-rule -- reason here'],
-    ['//', '// rule-ignore: my-rule -- reason here'],
-    ['--', '-- rule-ignore: my-rule -- reason here'],
-    ['/* */', '/* rule-ignore: my-rule -- reason here */'],
-    ['<!-- -->', '<!-- rule-ignore: my-rule -- reason here -->'],
-    [';', '; rule-ignore: my-rule -- reason here'],
-  ])('strips %s comment syntax', (_, markerLine) => {
-    const [marker] = findMarkers('a.ts', lines('code();', markerLine, 'x = 1'));
+    ['#', '# rule-exception: my-rule -- reason here'],
+    ['//', '// rule-exception: my-rule -- reason here'],
+    ['--', '-- rule-exception: my-rule -- reason here'],
+    [';', '; rule-exception: my-rule -- reason here'],
+    ['/* */', '/* rule-exception: my-rule -- reason here */'],
+    [' * ', ' * rule-exception: my-rule -- reason here'],
+    ['<!-- -->', '<!-- rule-exception: my-rule -- reason here -->'],
+    ['"""', '"""rule-exception: my-rule -- reason here"""'],
+    ["'''", "''' rule-exception: my-rule -- reason here '''"],
+    ['no opener, as inside a docstring', '    rule-exception: my-rule -- reason here'],
+  ])('reads a marker after %s', (_, markerLine) => {
+    const [marker] = findMarkers('a.ts', lines('code();', markerLine, '', 'x = 1'));
 
-    expect(marker).toEqual({
-      kind: 'ignore',
-      ruleId: 'my-rule',
-      reason: 'reason here',
-      file: 'a.ts',
-      markerLine: 2,
-      scope: { line: 3 },
-    });
+    expect(marker).toEqual({ kind: 'exception', ruleId: 'my-rule', reason: 'reason here', file: 'a.ts', markerLine: 2 });
   });
 
-  it('reads rule-todo as known debt', () => {
-    const [marker] = findMarkers('a.py', lines('x = 1', '    # rule-todo:   my-rule -- pay later', 'y = 2'));
+  it('reads rule-debt as known debt', () => {
+    const [marker] = findMarkers('a.py', lines('x = 1', '    # rule-debt:   my-rule -- pay later', 'y = 2'));
 
-    expect(marker).toEqual(expect.objectContaining({ kind: 'todo', reason: 'pay later' }));
+    expect(marker).toEqual(expect.objectContaining({ kind: 'debt', reason: 'pay later' }));
   });
 
-  it('covers the next line that is neither blank nor another marker', () => {
-    const markers = findMarkers('a.ts', lines(
-      'code();',
-      '// rule-ignore: one -- a',
+  it('reads the old names rule-ignore and rule-todo as rule-exception and rule-debt', () => {
+    const markers = findMarkers('a.py', lines('# rule-ignore: one -- a', '', '# rule-todo: two -- b'));
+
+    expect(markers.map((m) => [m.kind, m.ruleId])).toEqual([['exception', 'one'], ['debt', 'two']]);
+  });
+
+  it('reads rule ids with dots and underscores', () => {
+    const [marker] = findMarkers('q.sql', '-- rule-debt: sql.no_select_star -- list the columns');
+
+    expect(marker.ruleId).toBe('sql.no_select_star');
+  });
+
+  it('goes on with the reason over the next comment lines of the same kind', () => {
+    expect(reasons(lines(
+      '# rule-exception: r -- the export writes CSV to stdout,',
+      '#   so scripts can pipe it.',
+      'print(row)'
+    ))).toEqual(['the export writes CSV to stdout, so scripts can pipe it.']);
+  });
+
+  it('ends a line comment reason at a line that is not a comment of the same kind', () => {
+    expect(reasons(lines('// rule-exception: r -- one', '# two', '// three'))).toEqual(['one']);
+  });
+
+  it('ends a reason at a comment line with no text, and at a blank line', () => {
+    expect(reasons(lines('# rule-exception: r -- one', '#', '# two'))).toEqual(['one']);
+    expect(reasons(lines('"""', 'rule-debt: r -- one', '', 'two', '"""'))).toEqual(['one']);
+  });
+
+  it('ends a reason at the next marker', () => {
+    expect(reasons(lines('# rule-exception: a -- one', '# rule-debt: b -- two', '# three'))).toEqual(['one', 'two three']);
+  });
+
+  it('reads a marker in a docstring, with its reason up to the closing quotes', () => {
+    const [marker] = findMarkers('a.py', lines(
+      'def migrate(db):',
+      '    """Copy the old tables into the new schema.',
       '',
-      '// rule-todo: two -- b',
-      'target();'
+      '    rule-debt: no-print -- the progress lines go to stdout for now.',
+      '    Move them to logging when the job runner collects logs.',
+      '    """'
     ));
 
-    expect(markers.map((m) => m.scope)).toEqual([{ line: 5 }, { line: 5 }]);
+    expect(marker).toEqual(expect.objectContaining({
+      kind: 'debt',
+      markerLine: 4,
+      reason: 'the progress lines go to stdout for now. Move them to logging when the job runner collects logs.'
+    }));
   });
 
-  it('treats a marker on the first line as file-level', () => {
-    const [marker] = findMarkers('a.ts', lines('// rule-ignore: my-rule -- generated file', 'code();'));
-
-    expect(marker.scope).toBe('file');
+  it('strips the leading * of block comment lines and keeps the text before the closer', () => {
+    expect(reasons(lines(
+      '/**',
+      ' * rule-debt: r -- the retry count is fixed',
+      ' * for now. Read it from config.',
+      ' */'
+    ))).toEqual(['the retry count is fixed for now. Read it from config.']);
+    expect(reasons(lines(
+      '<!-- rule-exception: r -- 80 is the width of the name',
+      '     column in the user table. -->',
+      'more text'
+    ))).toEqual(['80 is the width of the name column in the user table.']);
   });
 
-  it('treats a marker right after a shebang as file-level', () => {
-    const [marker] = findMarkers('a.sh', lines('#!/usr/bin/env bash', '# rule-todo: my-rule -- legacy script', 'echo'));
-
-    expect(marker).toEqual(expect.objectContaining({ scope: 'file', markerLine: 2 }));
-  });
-
-  it('makes every marker in the leading run file-level', () => {
-    const markers = findMarkers('a.ts', lines('// rule-ignore: one -- a', '// rule-ignore: two -- b', 'code();'));
-
-    expect(markers.map((m) => m.scope)).toEqual(['file', 'file']);
+  it('ends the reason where the comment closes on the marker line', () => {
+    expect(reasons(lines('/* rule-exception: r -- one */', 'two'))).toEqual(['one']);
   });
 
   it('leaves the reason undefined when it is missing or empty', () => {
-    const markers = findMarkers('a.ts', lines(
+    expect(reasons(lines(
       'code();',
-      '// rule-ignore: one',
-      '// rule-ignore: two --',
-      '/* rule-ignore: three -- */',
+      '// rule-exception: one',
+      '// rule-exception: two --',
+      '/* rule-exception: three -- */',
+      '<!-- rule-exception: four -->',
       'x();'
-    ));
-
-    expect(markers.map((m) => m.reason)).toEqual([undefined, undefined, undefined]);
+    ))).toEqual([undefined, undefined, undefined, undefined]);
   });
 
-  it('ignores markers that are not a whole-line comment', () => {
-    const content = lines('const s = "// rule-ignore: one -- inside a string";', 'rule-ignore: two -- no comment');
+  it('needs the reason to start on the marker line', () => {
+    expect(reasons(lines('# rule-exception: r --', '# the reason, too late'))).toEqual([undefined]);
+  });
+
+  it('ignores marker text after code or in the middle of a sentence', () => {
+    const content = lines(
+      'const s = "// rule-exception: one -- inside a string";',
+      'print("done")  # rule-exception: two -- after code',
+      '# To accept it, write rule-exception: three -- and a reason.'
+    );
 
     expect(findMarkers('a.ts', content)).toEqual([]);
   });
 
   it('does not take placeholders like <rule-id> for a rule id', () => {
-    expect(findMarkers('a.md', lines('text', '# rule-ignore: <rule-id> -- <reason>'))).toEqual([]);
+    expect(findMarkers('a.md', lines('text', '# rule-exception: <rule-id> -- <reason>'))).toEqual([]);
+  });
+});
+
+describe('namedMarker', () => {
+  const marker: Marker = { kind: 'exception', ruleId: 'r', reason: 'why', file: 'src/a.ts', markerLine: 10 };
+
+  it('finds the marker at the place a covered_by names', () => {
+    expect(markerPlace(marker)).toBe('src/a.ts:10');
+    expect(namedMarker([marker], 'src/a.ts:10')).toBe(marker);
+    expect(namedMarker([marker], ' ./src/a.ts:10 ')).toBe(marker);
+  });
+
+  it('finds no marker at another place, or in a value that is not a place', () => {
+    expect(namedMarker([marker], 'src/a.ts:11')).toBeUndefined();
+    expect(namedMarker([marker], 'src/b.ts:10')).toBeUndefined();
+    expect(namedMarker([marker], 'src/a.ts')).toBeUndefined();
+    expect(namedMarker([marker], 10)).toBeUndefined();
+    expect(namedMarker([marker], undefined)).toBeUndefined();
   });
 });
 
@@ -95,54 +159,5 @@ describe('parseLineRange', () => {
     ['global', null],
   ])('parses %s', (line, expected) => {
     expect(parseLineRange(line)).toEqual(expected);
-  });
-});
-
-describe('isCovered', () => {
-  function lineMarker(line: number, overrides: Partial<Marker> = {}): Marker {
-    return { kind: 'ignore', ruleId: 'r', reason: 'why', file: 'src/a.ts', markerLine: line - 1, scope: { line }, ...overrides };
-  }
-
-  it('covers the marked line for the same rule and file', () => {
-    expect(isCovered([lineMarker(10)], 'r', 'src/a.ts', 10)).toBe(true);
-    expect(isCovered([lineMarker(10)], 'r', './src/a.ts', '10')).toBe(true);
-  });
-
-  it('does not cover another line, rule or file', () => {
-    expect(isCovered([lineMarker(10)], 'r', 'src/a.ts', 11)).toBe(false);
-    expect(isCovered([lineMarker(10)], 'other', 'src/a.ts', 10)).toBe(false);
-    expect(isCovered([lineMarker(10)], 'r', 'src/b.ts', 10)).toBe(false);
-  });
-
-  it('covers a range only when every line in it is marked', () => {
-    const markers = [lineMarker(10), lineMarker(11)];
-
-    expect(isCovered(markers, 'r', 'src/a.ts', '10-11')).toBe(true);
-    expect(isCovered(markers, 'r', 'src/a.ts', '10-12')).toBe(false);
-  });
-
-  it('covers the marker comment line and blank lines up to the code it marks', () => {
-    const marker = lineMarker(12, { markerLine: 10 });
-
-    expect(isCovered([marker], 'r', 'src/a.ts', 10)).toBe(true);
-    expect(isCovered([marker], 'r', 'src/a.ts', '10-12')).toBe(true);
-    expect(isCovered([marker], 'r', 'src/a.ts', 9)).toBe(false);
-    expect(isCovered([marker], 'r', 'src/a.ts', 13)).toBe(false);
-  });
-
-  it('does not cover N/A with a line-level marker', () => {
-    expect(isCovered([lineMarker(10)], 'r', 'src/a.ts', 'N/A')).toBe(false);
-  });
-
-  it('covers every line, range and N/A with a file-level marker', () => {
-    const markers = [lineMarker(1, { scope: 'file' })];
-
-    expect(isCovered(markers, 'r', 'src/a.ts', 99)).toBe(true);
-    expect(isCovered(markers, 'r', 'src/a.ts', '5-500')).toBe(true);
-    expect(isCovered(markers, 'r', 'src/a.ts', 'N/A')).toBe(true);
-  });
-
-  it('does not let a marker without a reason cover anything', () => {
-    expect(isCovered([lineMarker(10, { reason: undefined })], 'r', 'src/a.ts', 10)).toBe(false);
   });
 });

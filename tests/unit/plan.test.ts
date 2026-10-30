@@ -53,8 +53,8 @@ describe('buildPlan', () => {
     const markedContext: EvaluationContext = {
       type: 'files',
       files: [
-        { path: 'src/a.ts', content: 'x\n// rule-ignore: rule -- external key\ny\n// rule-todo: rule\nz\n// rule-ignore: other -- elsewhere\nw' },
-        { path: 'docs/b.md', content: '<!-- rule-ignore: rule -- out of scope -->' }
+        { path: 'src/a.ts', content: 'x\n// rule-exception: rule -- external key\ny\n// rule-debt: rule\nz\n// rule-exception: other -- elsewhere\nw' },
+        { path: 'docs/b.md', content: '<!-- rule-exception: rule -- out of scope -->' }
       ]
     };
 

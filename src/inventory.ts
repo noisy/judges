@@ -1,5 +1,5 @@
 import colors from 'picocolors';
-import { Marker } from './markers.js';
+import { Marker, markerPlace } from './markers.js';
 
 export interface MarkerGroup {
   ruleId: string;
@@ -28,7 +28,6 @@ function formatGroup(group: MarkerGroup): string {
 }
 
 function formatMarker(marker: Marker): string {
-  const location = `${marker.file}:${marker.markerLine}${marker.scope === 'file' ? ' (whole file)' : ''}`;
   const reason = marker.reason ?? colors.red('(no reason)');
-  return `  ${marker.kind.padEnd(6)} ${colors.cyan(location)}  ${reason}\n`;
+  return `  ${marker.kind.padEnd(9)} ${colors.cyan(markerPlace(marker))}  ${reason}\n`;
 }
