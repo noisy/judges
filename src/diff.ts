@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { EvaluationContext } from './types.js';
 import { repoRoot } from './files.js';
+import { UsageError } from './config.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -13,7 +14,7 @@ export function extractDiff(mode: 'staged' | 'diff' | 'head' | 'last-commit' = '
     const diff = runDiffCommand(command, mode);
     
     if (!diff.trim()) {
-      throw new Error(`No git diff found (${command}). Make sure you have uncommitted changes or use path mode (e.g., 'judge .').`);
+      throw emptyDiffError(command, mode);
     }
 
     const files = parseModifiedFiles(command, mode);
@@ -28,6 +29,7 @@ export function extractDiff(mode: 'staged' | 'diff' | 'head' | 'last-commit' = '
       stats
     };
   } catch (error: any) {
+    if (error instanceof UsageError) throw error;
     if (error.message.includes('fatal: ')) {
       throw new Error(`Git error: ${error.message}`);
     }
@@ -40,6 +42,14 @@ function buildDiffCommand(mode: 'staged' | 'diff' | 'head' | 'last-commit'): str
   if (mode === 'diff') return 'git diff';
   if (mode === 'last-commit') return 'git diff HEAD~1 HEAD';
   return 'git diff HEAD';
+}
+
+// A hook that runs with nothing staged was called by mistake; a clean pass would check nothing.
+function emptyDiffError(command: string, mode: 'staged' | 'diff' | 'head' | 'last-commit'): Error {
+  if (mode === 'staged') {
+    return new UsageError(`Nothing is staged (${command}). Stage your changes with git add, or use path mode (e.g., 'judge .').`);
+  }
+  return new Error(`No git diff found (${command}). Make sure you have uncommitted changes or use path mode (e.g., 'judge .').`);
 }
 
 function runDiffCommand(command: string, mode: 'staged' | 'diff' | 'head' | 'last-commit'): string {

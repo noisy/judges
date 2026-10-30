@@ -85,5 +85,16 @@ describe('inputUsageError', () => {
     expect(inputUsageError(parseArgs(['--root', 'fixture', '-f', 'fixture/src/a.py']))).toBeUndefined();
     expect(inputUsageError(parseArgs(['--staged']))).toBeUndefined();
   });
+
+  it('rejects an unknown --fail-on value, naming it', () => {
+    expect(inputUsageError(parseArgs(['--fail-on', 'critical'])))
+      .toBe("Unknown --fail-on value 'critical'. Use low, medium or high.");
+  });
+
+  it('accepts every severity as a --fail-on value, and med for medium', () => {
+    for (const value of ['low', 'medium', 'med', 'HIGH']) {
+      expect(inputUsageError(parseArgs(['--fail-on', value]))).toBeUndefined();
+    }
+  });
 });
 

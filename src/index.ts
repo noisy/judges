@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { parseArgs, inputUsageError, AppConfig } from './config.js';
+import { parseArgs, inputUsageError, AppConfig, UsageError, USAGE_ERROR_EXIT_CODE } from './config.js';
 import { extractDiff } from './diff.js';
 import { resolvePaths, readContents, repoRoot } from './files.js';
 import { discoverJudges, selectJudges, Judge } from './judges.js';
@@ -37,7 +37,7 @@ async function main() {
   const usageError = inputUsageError(config);
   if (usageError) {
     console.error(colors.red(`❌ Error: ${usageError}`));
-    process.exit(1);
+    process.exit(USAGE_ERROR_EXIT_CODE);
   }
 
   if (config.command === 'markers') {
@@ -88,6 +88,11 @@ async function main() {
   try {
     inputContext = resolveInputContext(config);
   } catch (error: any) {
+    // A usage error is reported even with --json: there is no report to carry it.
+    if (error instanceof UsageError) {
+      console.error(colors.red(`❌ Error: ${error.message}`));
+      process.exit(USAGE_ERROR_EXIT_CODE);
+    }
     if (!config.json) {
       console.error(colors.red(`\n❌ Error: ${error.message}\n`));
     }
@@ -120,7 +125,7 @@ function loadJudgesOrExit(config: AppConfig): { loaded: Judge[]; selected: Judge
     return { loaded, selected };
   } catch (error: any) {
     console.error(colors.red(`❌ Error: ${error.message}`));
-    process.exit(1);
+    process.exit(error instanceof UsageError ? USAGE_ERROR_EXIT_CODE : 1);
   }
 }
 

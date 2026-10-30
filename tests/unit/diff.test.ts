@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { extractDiff } from '../../src/diff.js';
+import { UsageError } from '../../src/config.js';
 import * as child_process from 'child_process';
 
 vi.mock('child_process', () => ({
@@ -39,6 +40,14 @@ describe('Diff Extraction', () => {
   it('should throw gracefully if diff is empty', () => {
     vi.mocked(child_process.execSync).mockReturnValue(' \n ');
     
-    expect(() => extractDiff('staged')).toThrow('No git diff found');
+    expect(() => extractDiff('diff')).toThrow('No git diff found');
+  });
+
+  it('throws a usage error that says so when nothing is staged', () => {
+    vi.mocked(child_process.execSync).mockReturnValue('');
+
+    expect(() => extractDiff('staged')).toThrow(new UsageError(
+      "Nothing is staged (git diff --cached). Stage your changes with git add, or use path mode (e.g., 'judge .')."
+    ));
   });
 });

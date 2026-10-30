@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { loadJudges, selectJudges, Judge } from '../../src/judges.js';
+import { UsageError } from '../../src/config.js';
 
 let root: string;
 
@@ -73,7 +74,7 @@ describe('loadJudges', () => {
 
   it('throws when an explicit rules directory does not exist', () => {
     expect(() => loadJudges({ legacyDirs: [], ruleDirs: [path.join(root, 'nope')] }))
-      .toThrow('Rules directory not found');
+      .toThrow(UsageError);
   });
 
   it('lets rules override legacy judges with the same id', () => {
@@ -131,6 +132,6 @@ describe('selectJudges', () => {
   });
 
   it('throws naming every unknown id', () => {
-    expect(() => selectJudges(judges, ['a', 'x', 'y'])).toThrow('Unknown judge or rule id: x, y');
+    expect(() => selectJudges(judges, ['a', 'x', 'y'])).toThrow(new UsageError('Unknown judge or rule id: x, y'));
   });
 });
