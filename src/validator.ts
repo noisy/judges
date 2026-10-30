@@ -26,6 +26,9 @@ export type Context = typeof CONTEXTS[number];
 const CONTEXT_OF_MODE = { 'one-shot': 'file', agent: 'repo' } as const;
 // Judges are read-only by construction: no tool that writes, runs code or reaches the network.
 export const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob'] as const;
+// How hard the model thinks, passed to the engine as it is; without it the engine uses its own default.
+export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type Effort = typeof EFFORTS[number];
 const SECONDS_PER_UNIT: Record<string, number> = { s: 1, m: 60 };
 // A directory outside the repo, whole: `../billing-service`, `../billing-service/**`, `/abs/dir/**`, `~/dir/**`.
 // The sandbox grants whole directories, so a narrower glob would promise less than it grants.
@@ -62,6 +65,8 @@ const settingsFields = {
   check: z.never({ error: `\`check\` ${NOT_A_RULE_FIELD}` }).optional(),
 
   model: z.string().min(1, '`model` cannot be empty').optional(),
+
+  effort: z.enum(EFFORTS, { error: `\`effort\` must be one of: ${EFFORTS.join(', ')}` }).optional(),
 
   tools: z.array(z.enum(READ_ONLY_TOOLS, {
     error: `\`tools\` entries must be read-only tools: ${READ_ONLY_TOOLS.join(', ')}`,

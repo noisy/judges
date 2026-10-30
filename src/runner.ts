@@ -56,6 +56,7 @@ async function runJudge(
 
   return {
     ...judgeIdentity(judge),
+    effort: judge.effort,
     status: outcome.status,
     issues: outcome.issues,
     covered: outcome.covered,
@@ -104,6 +105,7 @@ export function buildEngineRequest(judge: Judge, prompt: string, cwd?: string): 
     mode: judge.mode,
     cwd,
     model: judge.model,
+    effort: judge.effort,
     timeoutMs: judge.timeout_seconds * 1000,
     maxBudgetUsd: judge.max_budget_usd,
     tools: judge.tools,

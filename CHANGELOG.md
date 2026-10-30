@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Rules
+- New optional rule field `effort: low | medium | high | xhigh | max`: how hard the model thinks. `claude` gets `--effort <level>` for one-shot and agent rules; a rule without it gets no flag. `codex` and `gemini` ignore it. Any other value makes the rule invalid, and the other rules still run. `--json` records each rule's `effort`.
+
 ## 0.3.0 (2026-10-30)
 
 This release catches up with the judges-bench spec. A rule can now be a directory with its own tests, and the

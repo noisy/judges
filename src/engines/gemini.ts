@@ -2,7 +2,7 @@ import { EngineRequest } from './types.js';
 import { createCliEngine } from './process.js';
 import { resolveModel } from './models.js';
 
-// gemini -p has no flags for tools, budget or turn cap; those fields are ignored.
+// gemini -p has no flags for tools, budget, turn cap or effort; those fields are ignored.
 export function buildGeminiArgs(req: EngineRequest): string[] {
   const args = ['-p', req.prompt];
   const model = resolveModel('gemini', req.model);

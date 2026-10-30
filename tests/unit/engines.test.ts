@@ -72,6 +72,11 @@ describe('buildClaudeArgs', () => {
     expect(flagValue(args, '--max-budget-usd')).toBe('0.25');
     expect(flagValue(args, '--max-turns')).toBe('5');
   });
+
+  it.each([baseRequest, agentRequest])('passes effort as it is, and no --effort when unset (%#)', (request) => {
+    expect(flagValue(buildClaudeArgs({ ...request, effort: 'xhigh' }), '--effort')).toBe('xhigh');
+    expect(buildClaudeArgs(request)).not.toContain('--effort');
+  });
 });
 
 describe('readAccessArgs', () => {
@@ -123,7 +128,7 @@ describe('agent mode support', () => {
 
 describe('buildCodexArgs and buildGeminiArgs', () => {
   it('pass the prompt and ignore unsupported fields', () => {
-    const request = { ...baseRequest, tools: ['Read'], maxBudgetUsd: 1, maxTurns: 3 };
+    const request = { ...baseRequest, tools: ['Read'], maxBudgetUsd: 1, maxTurns: 3, effort: 'high' };
 
     expect(buildCodexArgs(request)).toEqual(['exec', 'review this']);
     expect(buildGeminiArgs(request)).toEqual(['-p', 'review this']);
