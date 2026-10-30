@@ -214,6 +214,15 @@ describe('interpretClaudeOutput for agent streams', () => {
     });
   });
 
+  it('ignores an array the model wrote in an earlier turn', () => {
+    const draft = JSON.stringify({
+      type: 'assistant', message: { content: [{ type: 'text', text: 'Draft: [{"file":"a.py","line":2,"message":"x"}]' }] }
+    });
+    const stdout = stream(draft, JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: '[]' }));
+
+    expect(interpretClaudeOutput(stdout, agentRequest).rawOutput).toBe('[]');
+  });
+
   it('shows the full path for reads outside the repo, so a use of allow_read is visible', () => {
     const stdout = stream(toolUse('t1', 'Read', { file_path: '../billing-service/api.py' }),
       toolUse('t2', 'Grep', { pattern: 'def charge', path: '/billing-service' }),
