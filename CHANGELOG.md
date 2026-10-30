@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-10-30)
+
+A run now says what it cost, and a rule stopped by a limit can turn the CI job into a warning.
 
 ### Exit codes
 - A run where a rule stopped on its time, turn or cost limit and nothing blocked now exits `3`, and ends with a warning that names the stopped rules. A block still exits `1`, also when a rule stopped. A rule with status `error` or `skipped` does not give `3`. In GitLab CI, `allow_failure: exit_codes: [3]` makes it a warning.
