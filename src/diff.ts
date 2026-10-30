@@ -7,7 +7,9 @@ import * as path from 'path';
 const MAX_DIFF_FILES_WARNING_THRESHOLD = 10;
 const MAX_DIFF_LINES_WARNING_THRESHOLD = 500;
 
-export function extractDiff(mode: 'staged' | 'diff' | 'head' | 'last-commit' = 'head'): EvaluationContext {
+export type DiffMode = 'staged' | 'diff' | 'head' | 'last-commit';
+
+export function extractDiff(mode: DiffMode = 'head'): EvaluationContext {
   try {
     const command = buildDiffCommand(mode);
     const diff = runDiffCommand(command, mode);
@@ -35,14 +37,14 @@ export function extractDiff(mode: 'staged' | 'diff' | 'head' | 'last-commit' = '
   }
 }
 
-function buildDiffCommand(mode: 'staged' | 'diff' | 'head' | 'last-commit'): string {
+function buildDiffCommand(mode: DiffMode): string {
   if (mode === 'staged') return 'git diff --cached';
   if (mode === 'diff') return 'git diff';
   if (mode === 'last-commit') return 'git diff HEAD~1 HEAD';
   return 'git diff HEAD';
 }
 
-function runDiffCommand(command: string, mode: 'staged' | 'diff' | 'head' | 'last-commit'): string {
+function runDiffCommand(command: string, mode: DiffMode): string {
   try {
     return execSync(command, { encoding: 'utf-8' });
   } catch (cmdError: any) {
@@ -50,7 +52,7 @@ function runDiffCommand(command: string, mode: 'staged' | 'diff' | 'head' | 'las
   }
 }
 
-function handleLastCommitFallback(error: any, mode: 'staged' | 'diff' | 'head' | 'last-commit'): string {
+function handleLastCommitFallback(error: any, mode: DiffMode): string {
   if (mode === 'last-commit' && error.message.includes('fatal: ')) {
     return execSync('git show HEAD --format=""', { encoding: 'utf-8' });
   }
@@ -70,7 +72,7 @@ function warnIfDiffIsLarge(stats: { filesChanged: number, linesChanged: number }
   }
 }
 
-function parseModifiedFiles(command: string, mode: 'staged' | 'diff' | 'head' | 'last-commit'): { path: string, content: string }[] {
+function parseModifiedFiles(command: string, mode: DiffMode): { path: string, content: string }[] {
   const gitStatusOutput = getModifiedFileEntries(command);
   const files: { path: string, content: string }[] = [];
   
@@ -110,7 +112,7 @@ function parseNameStatusLine(line: string): { status: string, filePath: string }
 
 // Git reports paths relative to the repository root, so the working-tree copy is read from there, not from cwd.
 // The tree specs `:<path>` and `HEAD:<path>` are root-relative too (only `./` makes them cwd-relative).
-function loadFileContent(filePath: string, mode: 'staged' | 'diff' | 'head' | 'last-commit', root: string): string | null {
+function loadFileContent(filePath: string, mode: DiffMode, root: string): string | null {
   try {
     if (mode === 'staged' || mode === 'last-commit') {
       return readFromGitTree(filePath, mode);
