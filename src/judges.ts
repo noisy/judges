@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import os from 'os';
 import matter from 'gray-matter';
-import { validateJudge, validateRule, defaultSettings, ValidationResult } from './validator.js';
+import { validateJudge, validateRule, defaultSettings, ValidationResult, Context } from './validator.js';
 import { UsageError } from './config.js';
 
 export interface Judge {
@@ -10,7 +10,8 @@ export interface Judge {
   name: string;
   description: string;
   version: string;
-  mode: 'one-shot' | 'agent';
+  context: Context; // how much the model sees
+  mode: 'one-shot' | 'agent'; // how it runs, derived from `context`
   timeout_seconds: number;
   max_budget_usd?: number;
   scope: string[];

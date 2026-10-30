@@ -5,9 +5,23 @@ import { EvaluationContext } from './types.js';
 const LINE_NUMBER_SEPARATOR = '| ';
 
 export function constructPrompt(judge: Judge, inputContext: EvaluationContext, markers: Marker[] = []): string {
-  return judge.mode === 'agent'
-    ? constructAgentPrompt(judge, inputContext, markers)
-    : constructOneShotPrompt(judge, inputContext, markers);
+  if (judge.mode === 'agent') return constructAgentPrompt(judge, inputContext, markers);
+  // With paths as input there is no diff, so a `diff` rule gets the whole files, as a `file` rule does.
+  if (judge.context === 'diff' && inputContext.type === 'diff') return constructDiffPrompt(judge, inputContext, markers);
+  return constructOneShotPrompt(judge, inputContext, markers);
+}
+
+// Only the hunks: the model cannot see the rest of the files, so it cannot report old code.
+function constructDiffPrompt(judge: Judge, inputContext: EvaluationContext, markers: Marker[]): string {
+  return `${outputContract()}
+Judge Name: ${judge.name || judge.id}
+Instructions to follow for your evaluation:
+${judge.instructions}
+
+${markersSection(markers)}Input Context to Review:
+${diffSection(inputContext)}
+Only the diff is shown, not the whole files. Report lines by their number in the new file, counted from the hunk headers (\`@@ -a,b +c,d @@\`: the first new line is c).
+`;
 }
 
 function constructOneShotPrompt(judge: Judge, inputContext: EvaluationContext, markers: Marker[]): string {

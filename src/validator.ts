@@ -18,6 +18,11 @@ const DEFAULT_TIMEOUT_SECONDS = 30;
 const DEFAULT_AGENT_TIMEOUT_SECONDS = 120;
 const DEFAULT_AGENT_TOOLS: string[] = ['Read', 'Grep', 'Glob'];
 const DEFAULT_AGENT_MAX_TURNS = 8;
+// How much the model sees. `diff` and `file` run as one call with no tools; `repo` as an agent.
+export const CONTEXTS = ['diff', 'file', 'repo'] as const;
+export type Context = typeof CONTEXTS[number];
+// `mode` is the old way to say `context`; alone, it stands for one context each.
+const CONTEXT_OF_MODE = { 'one-shot': 'file', agent: 'repo' } as const;
 // Judges are read-only by construction: no tool that writes, runs code or reaches the network.
 export const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob'] as const;
 const SECONDS_PER_UNIT: Record<string, number> = { s: 1, m: 60 };
@@ -28,7 +33,9 @@ const ALLOW_READ_ERROR = '`allow_read` entries must be a directory, optionally e
 const BUDGET_FORMAT_ERROR = '`budget` must look like "30s, $0.10" (time in s or m, cost in $, either part optional)';
 
 const settingsFields = {
-  mode: z.enum(['one-shot', 'agent']).optional().default('one-shot'),
+  mode: z.enum(['one-shot', 'agent']).optional(),
+
+  context: z.enum(CONTEXTS, { error: `\`context\` must be one of: ${CONTEXTS.join(', ')}` }).optional(),
 
   timeout_seconds: z.number().int('`timeout_seconds` must be an integer')
     .positive('`timeout_seconds` must be positive')
@@ -129,7 +136,8 @@ export function parseBudget(value: string): Budget | null {
 }
 
 interface SettingsInput {
-  mode: 'one-shot' | 'agent';
+  mode?: 'one-shot' | 'agent';
+  context?: Context;
   tools?: string[];
   allow_read?: string[];
   max_turns?: number;
@@ -143,22 +151,46 @@ function checkSettingsConsistency(data: SettingsInput, ctx: z.RefinementCtx): vo
   if (data.timeout_seconds !== undefined && data.budget?.timeout_seconds !== undefined) {
     ctx.addIssue({ code: 'custom', path: ['budget'], message: '`budget` time and `timeout_seconds` cannot both be set' });
   }
-  if (data.tools !== undefined && data.mode !== 'agent') {
-    ctx.addIssue({ code: 'custom', path: ['tools'], message: '`tools` is only allowed with `mode: agent`' });
-  }
-  if (data.allow_read !== undefined && data.mode !== 'agent') {
-    ctx.addIssue({ code: 'custom', path: ['allow_read'], message: '`allow_read` is only allowed with `mode: agent`' });
-  }
+  checkContext(data, ctx);
   if (data.command !== undefined && data.check !== 'deterministic') {
     ctx.addIssue({ code: 'custom', path: ['command'], message: '`command` is only allowed with `check: deterministic`' });
   }
 }
 
-// `mode` decides the defaults: one-shot judges get no tools, agents get read-only tools and a turn cap.
+// `mode` and `context` must agree, since the tool does not guess which one the author meant.
+// A rule without tools (`diff`, `file`) can read nothing, so agent settings on it are a mistake.
+function checkContext(data: SettingsInput, ctx: z.RefinementCtx): void {
+  if (data.mode !== undefined && data.context !== undefined && modeOf(data.context) !== data.mode) {
+    ctx.addIssue({ code: 'custom', path: ['context'],
+      message: `\`context: ${data.context}\` contradicts \`mode: ${data.mode}\`; set only \`context\`` });
+    return;
+  }
+  if (modeOf(contextOf(data)) === 'agent') return;
+  for (const field of ['tools', 'max_turns', 'allow_read'] as const) {
+    if (data[field] !== undefined) {
+      ctx.addIssue({ code: 'custom', path: [field],
+        message: `\`${field}\` is only allowed with \`context: repo\` (or \`mode: agent\`)` });
+    }
+  }
+}
+
+function contextOf(data: SettingsInput): Context {
+  return data.context ?? CONTEXT_OF_MODE[data.mode ?? 'one-shot'];
+}
+
+function modeOf(context: Context): 'one-shot' | 'agent' {
+  return context === 'repo' ? 'agent' : 'one-shot';
+}
+
+// `context` decides the defaults: one-shot judges get no tools, agents get read-only tools and a turn cap.
 function resolveDefaults<T extends SettingsInput>({ budget, ...rest }: T) {
-  const isAgent = rest.mode === 'agent';
+  const context = contextOf(rest);
+  const mode = modeOf(context);
+  const isAgent = mode === 'agent';
   return {
     ...rest,
+    context,
+    mode,
     tools: rest.tools ?? (isAgent ? DEFAULT_AGENT_TOOLS : []),
     allow_read: rest.allow_read ?? [],
     max_turns: rest.max_turns ?? (isAgent ? DEFAULT_AGENT_MAX_TURNS : undefined),
