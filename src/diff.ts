@@ -1,6 +1,6 @@
 import { execFileSync, execSync } from 'child_process';
 import { EvaluationContext } from './types.js';
-import { repoRoot } from './files.js';
+import { BINARY_SNIFF_BYTES, repoRoot } from './files.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -113,11 +113,11 @@ function parseNameStatus(output: string): { status: string, filePath: string }[]
 function loadFileContent(filePath: string, mode: 'staged' | 'diff' | 'head' | 'last-commit', root: string): string | null {
   try {
     if (mode === 'staged' || mode === 'last-commit') {
-      return readFromGitTree(filePath, mode);
+      return asText(readFromGitTree(filePath, mode));
     } else {
       const fullPath = path.resolve(root, filePath);
       if (fs.existsSync(fullPath)) {
-          return fs.readFileSync(fullPath, 'utf-8');
+          return asText(fs.readFileSync(fullPath));
       }
     }
   } catch (fileErr: any) {
@@ -126,7 +126,13 @@ function loadFileContent(filePath: string, mode: 'staged' | 'diff' | 'head' | 'l
   return null;
 }
 
-function readFromGitTree(filePath: string, mode: 'staged' | 'last-commit'): string {
+function readFromGitTree(filePath: string, mode: 'staged' | 'last-commit'): Buffer {
   const target = mode === 'staged' ? `:${filePath}` : `HEAD:${filePath}`;
-  return execFileSync('git', ['show', target], { encoding: 'utf-8' });
+  return execFileSync('git', ['show', target]);
+}
+
+// Binary the way git decides it, by a null byte near the start, whatever the file is called.
+// A binary file has no lines to judge, so none of its bytes go to the model.
+function asText(content: Buffer): string | null {
+  return content.subarray(0, BINARY_SNIFF_BYTES).includes(0) ? null : content.toString('utf-8');
 }
