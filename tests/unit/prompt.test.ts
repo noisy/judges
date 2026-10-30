@@ -36,6 +36,14 @@ describe('constructPrompt', () => {
     }
   });
 
+  it('tells a one-shot judge on a diff to report only the added or changed lines', () => {
+    const onlyNew = 'report only violations on lines the diff adds or changes';
+
+    expect(constructPrompt(oneShot, diffContext)).toContain(onlyNew);
+    expect(constructPrompt(oneShot, filesContext)).not.toContain(onlyNew);
+    expect(constructPrompt(agent, diffContext)).not.toContain(onlyNew);
+  });
+
   it('keeps the one-shot prompt free of repository instructions', () => {
     expect(constructPrompt(oneShot, diffContext)).not.toContain('Verify the rule against the repository');
   });

@@ -15,6 +15,8 @@ function constructOneShotPrompt(judge: Judge, inputContext: EvaluationContext, m
 
   if (inputContext.type === 'diff') {
     contextSection = `${diffSection(inputContext)}
+Only the change is under review: report only violations on lines the diff adds or changes (the "+" lines). The other lines are old code; do not report them, even where they break the rule.
+
 # Full file contents (Read-Only Context)
 `;
   } else {
