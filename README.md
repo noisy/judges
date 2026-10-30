@@ -52,6 +52,7 @@ judge -f src/index.ts src/utils.ts
 - `--top <X>`: Show the top X issues per judge (Default: 3).
 - `--engine <name>`: Choose the AI engine to execute. Supported: `claude` (default) and `codex`.
 - `--json`, `-j`: Output results in exact JSON format (for agents).
+- `--on-stop <warn|fail|ignore>`: What a rule stopped by its time, turn or cost limit does to the exit code. `warn` (default) exits 3 when nothing blocked, `fail` exits 1, `ignore` keeps the exit code. See [Exit codes](#exit-codes).
 - `--stage <name>`: Run only the rules of one gate: `commit` (rules without `stage` too), `push`, or `ci` (every rule). Rules of another stage are reported as skipped. Without it, every rule runs.
 - `--format <gitlab|sarif|junit> --output <path>`: Also write the findings as a CI report (see [Reports for CI](#reports-for-ci)). Repeatable.
 - `--root <dir>`: Repository root that agent judges explore and file paths are shown relative to (default: the git root). File input only; with a diff mode it is an error.
@@ -100,7 +101,30 @@ The `--fail-on` flag accepts:
 - `medium` (or `med`): Blocks on `High` or `Medium` severity.
 - `low`: Blocks on virtually any issue found.
 
-Only issues from judges that finished count. A judge that errors (e.g. the engine CLI is missing or rate-limited) or is stopped by its time, turn or cost limit is reported with a `⚠` warning, such as `⚠ my-rule: stopped (turns) after 8 turns`, but it never blocks the commit.
+Only issues from judges that finished count. A judge that errors (e.g. the engine CLI is missing or rate-limited) or is stopped by its time, turn or cost limit is reported with a `⚠` warning, such as `⚠ my-rule: stopped (turns) after 8 turns`. Its findings never block the commit; a stopped judge changes the exit code only through `--on-stop`.
+
+### Exit codes
+
+| Code | Meaning |
+| :--- | :--- |
+| `0` | Nothing blocked and no rule stopped (or `--on-stop ignore`). |
+| `1` | Blocked: a finding at or above `--fail-on`, or a stopped rule with `--on-stop fail`. |
+| `2` | Usage error, for example an unknown `--fail-on` or `--on-stop` value. Found before any rule runs. |
+| `3` | Nothing blocked, but a rule stopped on its time, turn or cost limit (`--on-stop warn`, the default). |
+
+- A block wins: when something blocks, the run exits `1`, also if a rule stopped.
+- Only status `stopped` gives `3`. A rule with status `error` or `skipped` does not.
+- `3` is simply the next free exit code, not a standard. `judge test` has no `--on-stop` and no exit `3`: a test whose rule stopped fails as `did-not-run`.
+
+In GitLab CI, exit `3` can make the job "passed with warnings" instead of failed, while exit `1` still fails it:
+
+```yaml
+judges:
+  script:
+    - npx judge --base origin/main --stage ci --fail-on high
+  allow_failure:
+    exit_codes: [3]
+```
 
 ### Reports for CI
 

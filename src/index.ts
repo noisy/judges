@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { parseArgs, inputUsageError, stageUsageError, AppConfig, UsageError, USAGE_ERROR_EXIT_CODE } from './config.js';
+import { parseArgs, inputUsageError, onStopUsageError, stageUsageError, AppConfig, OnStop, UsageError, USAGE_ERROR_EXIT_CODE } from './config.js';
 import { extractDiff } from './diff.js';
 import { resolvePaths, readContents, repoRoot } from './files.js';
 import { discoverJudges, selectJudges, ruleFileName, Judge } from './judges.js';
@@ -11,7 +11,7 @@ import { auditMarkers } from './marker-audit.js';
 import { findMarkersInFiles } from './markers.js';
 import { groupByRule, formatInventory } from './inventory.js';
 import { formatIssuesList, formatJudgeFailure } from './format.js';
-import { shouldBlock } from './gate.js';
+import { GateOutcome, gateOutcome, stoppedRules } from './gate.js';
 import { pairReports, reportsUsageError, writeReports } from './reports/index.js';
 import { withoutRuleTests } from './rule-test-spec.js';
 import { testRules, testExitCode, formatTestResults } from './rule-test.js';
@@ -38,7 +38,7 @@ async function main() {
   }
 
   const reportsError = config.command === undefined ? reportsUsageError(config.formats, config.outputs) : undefined;
-  const usageError = inputUsageError(config) ?? stageUsageError(config) ?? reportsError;
+  const usageError = inputUsageError(config) ?? stageUsageError(config) ?? onStopUsageError(config) ?? reportsError;
   if (usageError) {
     console.error(colors.red(`❌ Error: ${usageError}`));
     process.exit(USAGE_ERROR_EXIT_CODE);
@@ -89,7 +89,7 @@ async function main() {
   }
 
   if (judges.length === 0) {
-    console.log("No judges found in ~/.judge/judges/, ./.judge/judges/ or --rules directories");
+    statusPrinter(config)("No judges found in ~/.judge/judges/, ./.judge/judges/ or --rules directories");
     return;
   }
 
@@ -119,9 +119,23 @@ async function main() {
   const root = inputContext.root ?? repoRoot();
   writeReports(pairReports(config.formats, config.outputs), { results, root, version: pkg.version });
 
-  if (shouldBlock(results, config.failOn)) {
-    console.log(colors.red(`\n❌ Execution blocked: Issues of severity '${config.failOn}' or higher were found.`));
-    process.exit(1);
+  const outcome = gateOutcome(results, config.failOn, config.onStop as OnStop);
+  printGateOutcome(outcome, results, config);
+  if (outcome !== 'passed') process.exit(GATE_EXIT_CODES[outcome]);
+}
+
+// 3 is simply the next free exit code: CI can treat it as a warning (GitLab `allow_failure: exit_codes: [3]`).
+const GATE_EXIT_CODES: Record<GateOutcome, number> = { passed: 0, 'blocked-by-findings': 1, 'blocked-by-stop': 1, stopped: 3 };
+
+function printGateOutcome(outcome: GateOutcome, results: JudgeResult[], config: AppConfig): void {
+  const print = statusPrinter(config);
+  const stopped = stoppedRules(results).map((result) => result.judgeId).join(', ');
+  if (outcome === 'blocked-by-findings') {
+    print(colors.red(`\n❌ Execution blocked: Issues of severity '${config.failOn}' or higher were found.`));
+  } else if (outcome === 'blocked-by-stop') {
+    print(colors.red(`\n❌ Execution blocked: rules stopped on a limit and did not finish (--on-stop fail): ${stopped}`));
+  } else if (outcome === 'stopped') {
+    print(colors.yellow(`\n⚠ Rules stopped on a limit and did not finish: ${stopped}. Exit code 3 (--on-stop warn).`));
   }
 }
 
@@ -129,6 +143,12 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+// With --json, stdout holds only the JSON report, so `judge --json | jq` works: status lines go to stderr.
+// The human report keeps them on stdout, after the results they sum up.
+function statusPrinter(config: AppConfig): (line: string) => void {
+  return config.json ? console.error : console.log;
+}
 
 // Markers may name any loaded rule, so the full set is kept next to the --only selection.
 function loadJudgesOrExit(config: AppConfig): { loaded: Judge[]; selected: Judge[] } {
@@ -261,10 +281,17 @@ Options:
   --stage <name> Run only the rules of a gate: commit, push or ci (ci runs all; default: all)
   --root <dir> Repository root agent judges explore (default: the git root); file input only
   --base <ref> Review the branch's commits since it left <ref> (git diff <ref>...HEAD)
+  --fail-on <low|medium|high>
+               Exit 1 when a finding is at or above this severity
+  --on-stop <warn|fail|ignore>
+               What a rule stopped by its time, turn or cost limit does: warn exits 3 when nothing
+               blocked (default), fail exits 1, ignore keeps the exit code
   --format <gitlab|sarif|junit> --output <path>
                Also write the findings as a CI report; repeatable, the n-th --output gets the n-th --format
   --help, -h   Show this help message
   --version, -v Show the version number
+
+Exit codes: 0 passed, 1 blocked, 2 usage error, 3 a rule stopped on a limit and nothing blocked
   `);
 }
 

@@ -118,9 +118,10 @@ A rule that hits one of its limits did not finish. It gets status `stopped` and 
 | `turns` | `max_turns` | result `error_max_turns` |
 | `cost` | `budget` cost part | result `error_max_budget_usd` |
 
-- **No findings.** The answer was cut off, so a partial list would look like a full check. A stopped rule never blocks `--fail-on` and does not change the exit code.
+- **No findings.** The answer was cut off, so a partial list would look like a full check. A stopped rule never blocks `--fail-on`.
+- **Exit code.** `--on-stop` decides: `warn` (default) exits `3` when a rule stopped and nothing blocked, `fail` exits `1`, `ignore` leaves the exit code alone. A block on findings wins over `3`. An unknown value is a usage error (exit `2`). See [Exit codes](../README.md#exit-codes).
 - **What it used.** The `--json` record keeps `turns`, `costUsd` and `durationMs` up to the stop. On a time stop the engine never says its totals: an agent's turns are counted from the stream before the kill, a one-shot rule counts as 1 turn, and `costUsd` is `null`.
-- **Report.** The summary line says `⚠ <rule>: stopped (<stopReason>)` and the limit, e.g. `stopped (turns) after 8 turns`. `error` holds the engine's message. JUnit reports a stopped rule as an `<error>`.
+- **Report.** The summary line says `⚠ <rule>: stopped (<stopReason>)` and the limit, e.g. `stopped (turns) after 8 turns`. With `--on-stop warn`, the run ends with a warning that names the stopped rules. `error` holds the engine's message. JUnit reports a stopped rule as an `<error>`.
 - **`error` is for real errors.** A bad rule, a crashed engine or an answer that cannot be read is `error`, never `stopped`.
 
 ### Sandbox
@@ -286,7 +287,7 @@ judge test --rules rules
 judge test --rules rules --only no-print-calls --json
 ```
 
-Without `--json`, one line per test: `✔ <rule>/<test> (review)`, `✘ <rule>/<test> (audit): <reason>` or `○ <rule>: skipped (no tests)`, then a count of each status. A rule without tests is skipped and does not fail the run. `judge test` exits `0` when no test failed, `1` when one failed, and `2` on a usage error, such as an unknown `--only` id or a missing rules directory. `--rules`, `--only` and `--engine` work as in a review.
+Without `--json`, one line per test: `✔ <rule>/<test> (review)`, `✘ <rule>/<test> (audit): <reason>` or `○ <rule>: skipped (no tests)`, then a count of each status. A rule without tests is skipped and does not fail the run. `judge test` exits `0` when no test failed, `1` when one failed (a test whose rule stopped fails as `did-not-run`; there is no exit `3`), and `2` on a usage error, such as an unknown `--only` id or a missing rules directory. `--rules`, `--only` and `--engine` work as in a review.
 
 `--json` prints an array with one entry per test, sorted by rule id and then test name:
 

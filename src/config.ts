@@ -18,6 +18,7 @@ export interface AppConfig {
   version: boolean;
   visibleIssueLimit: number;
   failOn?: string;
+  onStop: string; // what a rule stopped on a limit does to the exit code; checked by onStopUsageError
   lastCommit: boolean;
   base?: string;
   engine: SupportedEngine;
@@ -37,6 +38,11 @@ export const BASE_NEEDS_REF = '--base needs a ref, for example --base main';
 
 export const USAGE_ERROR_EXIT_CODE = 2;
 
+// `warn` exits 3 when a rule stopped and nothing blocked, `fail` blocks on a stopped rule, `ignore` does neither.
+export const ON_STOP_ACTIONS = ['warn', 'fail', 'ignore'] as const;
+export type OnStop = typeof ON_STOP_ACTIONS[number];
+const DEFAULT_ON_STOP: OnStop = 'warn';
+
 // A mistake in how the tool was called, found before any rule runs.
 export class UsageError extends Error {}
 
@@ -52,6 +58,12 @@ export function inputUsageError(config: AppConfig): string | undefined {
   return undefined;
 }
 
+// Checked like --stage: an unknown value is a usage error, not a silent default.
+export function onStopUsageError(config: AppConfig): string | undefined {
+  if ((ON_STOP_ACTIONS as readonly string[]).includes(config.onStop)) return undefined;
+  return `Unknown --on-stop value '${config.onStop}'. Use ${ON_STOP_ACTIONS.join(', ')}.`;
+}
+
 // The name is checked here, not in parseArgs, so an unknown one is a usage error rather than a silent default.
 export function stageUsageError(config: AppConfig): string | undefined {
   if (config.stage === undefined || (STAGES as readonly string[]).includes(config.stage)) return undefined;
@@ -60,7 +72,7 @@ export function stageUsageError(config: AppConfig): string | undefined {
 
 export function parseArgs(argv: string[]): AppConfig {
   const parsed = mri(argv, {
-    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules', 'only', 'root', 'base', 'stage', 'format', 'output'],
+    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules', 'only', 'root', 'base', 'stage', 'format', 'output', 'on-stop'],
     boolean: ['json', 'help', 'version', 'short', 'full', 'staged', 'diff', 'last-commit', 'check', 'list'],
     alias: {
       f: 'file',
@@ -144,6 +156,7 @@ export function parseArgs(argv: string[]): AppConfig {
     version: !!parsed.version,
     visibleIssueLimit,
     failOn,
+    onStop: parsed['on-stop'] === undefined ? DEFAULT_ON_STOP : String([parsed['on-stop']].flat().pop()),
     lastCommit: !!parsed['last-commit'],
     base: hasBase ? [parsed.base].flat().pop() : undefined, // the last --base wins when it is repeated
     engine,
