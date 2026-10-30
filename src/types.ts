@@ -43,6 +43,7 @@ export interface JudgeResult {
   status: JudgeStatus;
   issues: Issue[];
   suppressed?: number; // findings dropped because a marker covers them
+  outsideDiff?: number; // findings dropped because none of their lines is an added line of the diff
   durationMs: number;
   costUsd?: number;
   turns?: number;

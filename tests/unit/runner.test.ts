@@ -170,6 +170,63 @@ describe('runPlan with markers', () => {
   });
 });
 
+describe('runPlan on a diff', () => {
+  // a.ts gains line 3; lines 1 and 2 are old.
+  const diffContext: EvaluationContext = {
+    type: 'diff',
+    rawDiff: 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,2 +1,3 @@\n one\n two\n+three\n',
+    files: [{ path: 'a.ts', content: 'one\ntwo\nthree\n' }]
+  };
+  const issues = [
+    { file: 'a.ts', line: 1, severity: 'low', message: 'old' },
+    { file: 'a.ts', line: 3, severity: 'low', message: 'new' }
+  ];
+
+  beforeEach(() => {
+    run.mockReset();
+    vi.mocked(getEngine).mockReturnValue({ name: 'claude', isAvailable: () => true, run });
+  });
+
+  it('drops one-shot findings outside the added lines and counts them apart', async () => {
+    run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
+
+    const [result] = await runPlan([{ judge, context: diffContext, markers: [] }], 'claude');
+
+    expect(result.issues.map((i) => i.message)).toEqual(['new']);
+    expect(result.outsideDiff).toBe(1);
+    expect(result.suppressed).toBe(0);
+  });
+
+  it('counts a finding once, as suppressed, when a marker covers it outside the diff', async () => {
+    const marker: Marker = { kind: 'todo', ruleId: 'srp', reason: 'known', file: 'a.ts', markerLine: 1, scope: { line: 1 } };
+    run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
+
+    const [result] = await runPlan([{ judge, context: diffContext, markers: [marker] }], 'claude');
+
+    expect(result.suppressed).toBe(1);
+    expect(result.outsideDiff).toBe(0);
+  });
+
+  it('keeps agent findings outside the diff: a change may break an untouched caller', async () => {
+    const agent = { ...judge, mode: 'agent' } as Judge;
+    run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
+
+    const [result] = await runPlan([{ judge: agent, context: diffContext, markers: [] }], 'claude');
+
+    expect(result.issues).toHaveLength(2);
+    expect(result.outsideDiff).toBeUndefined();
+  });
+
+  it('keeps every finding with paths as input, where there is no diff', async () => {
+    run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
+
+    const [result] = await runPlan([planned()], 'claude');
+
+    expect(result.issues).toHaveLength(2);
+    expect(result.outsideDiff).toBeUndefined();
+  });
+});
+
 describe('runPlan progress and skips', () => {
   beforeEach(() => {
     run.mockReset();
