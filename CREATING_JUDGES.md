@@ -16,13 +16,13 @@ Judges can be defined at two levels:
 
 ## 📏 Rule Files
 
-A rule is a single Markdown file named after its id, kept in any directory (for example `rules/` in your repository) and loaded with `--rules`:
+A rule is a Markdown file named after its id, `<id>.md`, or a directory `<id>/` with the rule in `RULE.md` and room for its [tests](docs/judge-format.md#testing-rules). Keep rules in any directory (for example `rules/` in your repository) and load them with `--rules`:
 
 ```bash
 judge --staged --rules rules
 ```
 
-`--rules` can be repeated. A rule overrides a judge with the same id. The frontmatter needs only `id` (matching the file name); `scope`, `severity`, `check`, `mode`, `model`, `budget`, `tools`, `allow_read` and `max_turns` are optional. `mode: agent` lets the judge read the repository with read-only tools; see [Agent judges](docs/judge-format.md#agent-judges). See [docs/judge-format.md](docs/judge-format.md#rule-files) for every field.
+`--rules` can be repeated. A rule overrides a judge with the same id. The frontmatter needs only `id` (matching the file name, or the directory name for `RULE.md`); `scope`, `severity`, `mode`, `model`, `budget`, `tools`, `allow_read` and `max_turns` are optional. `mode: agent` lets the judge read the repository with read-only tools; see [Agent judges](docs/judge-format.md#agent-judges). See [docs/judge-format.md](docs/judge-format.md#rule-files) for every field.
 
 ```markdown
 ---

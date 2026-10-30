@@ -12,7 +12,7 @@ Each `JUDGE.md` file defines an independent AI evaluator in `judge-cli`. The fil
 | `mode` | `'one-shot' \| 'agent'` | No | `'one-shot'` | `one-shot` sees only the text it is given; `agent` may read the repository. See [Agent judges](#agent-judges). |
 | `timeout_seconds` | `number` | No | `30` | Execution timeout in seconds. Must be a positive integer. |
 
-`JUDGE.md` files also accept the rule settings below (`scope`, `severity`, `check`, `model`, `budget`, `tools`, `max_turns`, `command`).
+`JUDGE.md` files also accept the rule settings below (`scope`, `severity`, `model`, `budget`, `tools`, `max_turns`).
 
 ## Minimal Valid `JUDGE.md` Example
 
@@ -46,19 +46,22 @@ Evaluate the code for Single Responsibility Principle (SRP) violations.
 
 Deviations from a rule are marked in the code with `rule-ignore` / `rule-todo` markers; see [markers.md](markers.md).
 
-A rule is a flat Markdown file `<dir>/<id>.md`, loaded from every directory passed with `--rules <dir>` (repeatable). Rules override `JUDGE.md` judges with the same id. The body holds the instructions: an `Intent` in one sentence, then the rule.
+A rule is a Markdown file `<dir>/<id>.md`, or a directory `<dir>/<id>/` that holds the rule in `RULE.md` and its [tests](#testing-rules) in `tests/`. Rules are loaded from every directory passed with `--rules <dir>` (repeatable); a later directory overrides a rule with the same id, and rules override `JUDGE.md` judges with the same id. The body holds the instructions: an `Intent` in one sentence, then the rule.
+
+- Only `<dir>/*.md` and `<dir>/*/RULE.md` are rules. Rules are not searched for deeper, so the `.md` files of a rule's tests are never rules. Other files, and directories whose name starts with `.`, are ignored.
+- A directory without `RULE.md` is reported as an invalid rule under the directory name, so a rule moved into a directory without a rename does not stop running in silence.
+- A file `<id>.md` and a directory `<id>/` in the same rules directory is a usage error (exit code `2`) that names both paths: nothing can tell which one is meant.
+- `check` and `command` are not rule fields. Every rule is checked by a model and judges runs no commands, so a rule that sets either is invalid. A check that a linter or a test can do belongs in the linter or the test.
 
 | Field | Type | Required | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `id` | `string` | **Yes** | - | Must match the file name without `.md`. |
+| `id` | `string` | **Yes** | - | Must match the file name without `.md`, or for `RULE.md` the directory name. |
 | `name` | `string` | No | `id` | Display name. |
 | `description` | `string` | No | `''` | Short summary. |
 | `version` | `string` | No | `''` | Semver, validated when present. |
 | `scope` | `string[]` | No | `["**/*"]` | Path globs the rule applies to. |
 | `stage` | `'commit' \| 'push' \| 'ci'` | No | `'commit'` | The gate the rule runs at. `--stage commit` and `--stage push` run only their own rules and report the others as skipped; `--stage ci`, or no `--stage`, runs every rule. Never derived from the model or budget. |
 | `severity` | `'low' \| 'medium' \| 'high'` | No | `'medium'` | Severity of a violation. |
-| `check` | `'judge' \| 'deterministic'` | No | `'judge'` | `deterministic` rules are never sent to a model. |
-| `command` | `string` | No | - | Script or test for a `deterministic` rule. Only allowed with `check: deterministic`. |
 | `model` | `string` | No | engine default | Alias (`small`, `medium`, `large`) or an exact model id. |
 | `budget` | `string` | No | - | Time and cost caps, e.g. `30s, $0.10` or `2m`. Either part is optional. The time part sets `timeout_seconds`; setting both is an error. |
 | `mode` | `'one-shot' \| 'agent'` | No | `'one-shot'` | Same as for `JUDGE.md`. |
@@ -72,20 +75,11 @@ A rule is a flat Markdown file `<dir>/<id>.md`, loaded from every directory pass
 id: one-call-per-connector
 scope: ["src/connectors/**/*.py"]
 severity: high
-check: judge
 model: small
 budget: 30s, $0.10
 ---
 Intent: a connector is a thin adapter to one external service.
 Rule: one HTTP call per public function; no calls to other connector functions; no branching on domain data.
-```
-
-```markdown
----
-id: lint
-check: deterministic
-command: npm run lint
----
 ```
 
 ## Agent judges

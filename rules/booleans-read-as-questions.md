@@ -1,7 +1,6 @@
 ---
 id: booleans-read-as-questions
 severity: low
-check: judge
 model: small
 budget: 30s, $0.05
 ---

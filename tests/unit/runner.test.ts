@@ -287,11 +287,11 @@ describe('runPlan progress and skips', () => {
 
   it('keeps plan order when skipped and executed judges are mixed', async () => {
     run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
-    const skippedJudge = { ...judge, id: 'deterministic-one' } as Judge;
+    const skippedJudge = { ...judge, id: 'out-of-scope' } as Judge;
 
     const results = await runPlan([{ judge: skippedJudge, skip: 'x' }, planned()], 'claude');
 
-    expect(results.map((r) => [r.judgeId, r.status])).toEqual([['deterministic-one', 'skipped'], ['srp', 'ok']]);
+    expect(results.map((r) => [r.judgeId, r.status])).toEqual([['out-of-scope', 'skipped'], ['srp', 'ok']]);
   });
 });
 

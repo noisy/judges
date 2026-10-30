@@ -2,7 +2,7 @@
 import { parseArgs, inputUsageError, stageUsageError, AppConfig, UsageError, USAGE_ERROR_EXIT_CODE } from './config.js';
 import { extractDiff } from './diff.js';
 import { resolvePaths, readContents, repoRoot } from './files.js';
-import { discoverJudges, selectJudges, Judge } from './judges.js';
+import { discoverJudges, selectJudges, ruleFileName, Judge } from './judges.js';
 import { ProgressRenderer, issueSummaryLine } from './ui.js';
 import { EvaluationContext, JudgeResult, Stage } from './types.js';
 import { runPlan } from './runner.js';
@@ -64,7 +64,7 @@ async function main() {
 
       let hasErrors = false;
     for (const j of judgesToCheck) {
-      const fileName = path.basename(j.filePath);
+      const fileName = ruleFileName(j);
       if (j.isValid) {
         console.log(colors.green(`✔ ${j.id} ${fileName} is valid (${describeSettings(j)})`));
       } else {
@@ -177,7 +177,7 @@ function printMarkerInventory(config: AppConfig): void {
 
 function describeSettings(judge: Judge): string {
   if (judge.format === 'rule') {
-    return `${judge.severity} · ${judge.check} · ${judge.mode} · ${judge.timeout_seconds}s`;
+    return `${judge.severity} · ${judge.mode} · ${judge.timeout_seconds}s`;
   }
   return `v${judge.version} · ${judge.mode} · ${judge.timeout_seconds}s`;
 }

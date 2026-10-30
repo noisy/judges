@@ -2,7 +2,6 @@
 id: one-call-per-connector
 scope: ["src/connectors/**/*.py"]
 severity: high
-check: judge
 model: small
 budget: 30s, $0.10
 ---

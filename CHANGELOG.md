@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Rules
+- A rule can be a directory: `<rules dir>/<id>/RULE.md`, with the directory name as its id. A directory without `RULE.md` is reported as an invalid rule. A file and a directory with the same id in one rules directory is a usage error (exit 2) that names both.
+- `check` and `command` are no longer rule fields. A rule that sets either is invalid, and the other rules still run.
+
 ## 0.2.0 (2026-10-30)
 
 The first release with rules. A rule is one Markdown file: settings in the frontmatter, the rule text in the body.

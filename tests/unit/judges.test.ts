@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadJudges, selectJudges, Judge } from '../../src/judges.js';
+import { loadJudges, selectJudges, ruleDirectory, ruleFileName, Judge } from '../../src/judges.js';
 import { UsageError } from '../../src/config.js';
 
 let root: string;
@@ -25,7 +25,6 @@ const RULE = `---
 id: one-call-per-connector
 scope: ["src/connectors/**/*.py"]
 severity: high
-check: judge
 model: small
 budget: 30s, $0.10
 ---
@@ -46,7 +45,7 @@ describe('loadJudges', () => {
 
     expect(judge).toMatchObject({
       id: 'naming', name: 'Naming', version: '1.0.0', format: 'judge-md', isValid: true,
-      mode: 'one-shot', timeout_seconds: 30, scope: ['**/*'], severity: 'medium', check: 'judge', tools: [],
+      mode: 'one-shot', timeout_seconds: 30, scope: ['**/*'], severity: 'medium', tools: [],
       instructions: 'Legacy instructions.',
     });
   });
@@ -112,11 +111,86 @@ describe('loadJudges', () => {
     expect(rule.validationErrors.join(' ')).toContain('cannot read the frontmatter');
   });
 
-  it('loads a deterministic rule with a command and no body', () => {
-    const rulesDir = writeFile('rules/lint.md', '---\nid: lint\ncheck: deterministic\ncommand: npm run lint\n---\n');
-    const [rule] = loadJudges({ legacyDirs: [], ruleDirs: [rulesDir] });
+  it('keeps a rule with `check` or `command` as invalid, next to a valid one', () => {
+    writeFile('rules/lint.md', '---\nid: lint\ncommand: npm run lint\n---\n');
+    const rulesDir = writeFile('rules/booleans.md', '---\nid: booleans\n---\nBody.');
+    const judges = loadJudges({ legacyDirs: [], ruleDirs: [rulesDir] });
+    const lint = judges.find((judge) => judge.id === 'lint');
 
-    expect(rule).toMatchObject({ isValid: true, check: 'deterministic', command: 'npm run lint', instructions: '' });
+    expect(judges.find((judge) => judge.id === 'booleans')?.isValid).toBe(true);
+    expect(lint?.isValid).toBe(false);
+    expect(lint?.validationErrors.join(' ')).toContain('`command` is not a rule field');
+  });
+});
+
+describe('loadJudges with rule directories', () => {
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'judges-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // Sorted, since the order of a directory listing depends on the file system.
+  function load(): Judge[] {
+    return loadJudges({ legacyDirs: [], ruleDirs: [path.join(root, 'rules')] }).sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  it('loads <id>/RULE.md with the directory name as id, next to a rule file', () => {
+    writeFile('rules/no-print/RULE.md', '---\nid: no-print\n---\nNo print.');
+    writeFile('rules/booleans.md', '---\nid: booleans\n---\nBooleans.');
+    const judges = load();
+
+    expect(judges.map(({ id, isValid, instructions }) => ({ id, isValid, instructions }))).toEqual([
+      { id: 'booleans', isValid: true, instructions: 'Booleans.' },
+      { id: 'no-print', isValid: true, instructions: 'No print.' },
+    ]);
+    expect(ruleDirectory(judges[1])).toBe(path.join(root, 'rules', 'no-print'));
+    expect(ruleFileName(judges[1])).toBe(path.join('no-print', 'RULE.md'));
+    expect(ruleDirectory(judges[0])).toBeUndefined();
+  });
+
+  it('marks a RULE.md invalid when its id does not match the directory name', () => {
+    writeFile('rules/todo-has-issue/RULE.md', '---\nid: todo-has-issues\n---\nBody.');
+    const [rule] = load();
+
+    expect(rule).toMatchObject({ id: 'todo-has-issue', isValid: false });
+    expect(rule.validationErrors).toContain('error: `id` "todo-has-issues" must match the directory name "todo-has-issue"');
+  });
+
+  it('reports a directory without RULE.md as an invalid rule and never loads the .md files inside it', () => {
+    writeFile('rules/no-magic-numbers/no-magic-numbers.md', '---\nid: no-magic-numbers\n---\nBody.');
+    writeFile('rules/no-print/RULE.md', '---\nid: no-print\n---\nBody.');
+    writeFile('rules/no-print/tests/prints-greeting.md', '---\nexpect: findings\n---\nA test.');
+    const judges = load();
+
+    expect(judges.map(({ id, isValid }) => ({ id, isValid }))).toEqual([
+      { id: 'no-magic-numbers', isValid: false }, { id: 'no-print', isValid: true },
+    ]);
+    expect(judges[0].validationErrors.join(' ')).toContain('`RULE.md` is missing');
+  });
+
+  it('ignores hidden directories', () => {
+    writeFile('rules/.cache/notes.md', 'not a rule');
+    expect(load()).toEqual([]);
+  });
+
+  it('refuses a file and a directory with the same id in one rules directory, naming both', () => {
+    const file = path.join(writeFile('rules/no-print.md', '---\nid: no-print\n---\nBody.'), 'no-print.md');
+    const directory = path.join(writeFile('rules/no-print/RULE.md', '---\nid: no-print\n---\nBody.'), 'RULE.md');
+
+    expect(load).toThrow(UsageError);
+    expect(load).toThrow(file);
+    expect(load).toThrow(directory);
+  });
+
+  it('lets a rule directory in a later rules directory override a rule file', () => {
+    writeFile('team/no-print.md', '---\nid: no-print\n---\nTeam.');
+    writeFile('project/no-print/RULE.md', '---\nid: no-print\n---\nProject.');
+    const judges = loadJudges({ legacyDirs: [], ruleDirs: [path.join(root, 'team'), path.join(root, 'project')] });
+
+    expect(judges.map(({ id, instructions }) => ({ id, instructions }))).toEqual([{ id: 'no-print', instructions: 'Project.' }]);
   });
 });
 
