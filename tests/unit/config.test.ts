@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseArgs, inputUsageError, stageUsageError, ROOT_NEEDS_FILE_INPUT, BASE_NEEDS_REF } from '../../src/config.js';
+import { parseArgs, inputUsageError, onStopUsageError, stageUsageError, ROOT_NEEDS_FILE_INPUT, BASE_NEEDS_REF } from '../../src/config.js';
 
 describe('CLI Configuration Parsing', () => {
   it('should parse default boolean flags correctly', () => {
@@ -138,4 +138,20 @@ describe('stageUsageError', () => {
     'rejects an unknown stage: %j', (argv) => {
       expect(stageUsageError(parseArgs(argv))).toMatch(/^Unknown stage .*expected one of commit, push, ci$/);
     });
+});
+
+describe('onStopUsageError', () => {
+  it('warns on a stopped rule unless told otherwise', () => {
+    expect(parseArgs(['--staged']).onStop).toBe('warn');
+    expect(onStopUsageError(parseArgs(['--staged']))).toBeUndefined();
+  });
+
+  it.each(['warn', 'fail', 'ignore'])('accepts --on-stop %s', (value) => {
+    expect(onStopUsageError(parseArgs(['--on-stop', value]))).toBeUndefined();
+  });
+
+  it.each([[['--on-stop', 'sometimes']], [['--on-stop', 'Fail']], [['--on-stop']]])('rejects an unknown value and names it: %j', (argv) => {
+    const value = argv[1] ?? '';
+    expect(onStopUsageError(parseArgs(argv))).toBe(`Unknown --on-stop value '${value}'. Use warn, fail, ignore.`);
+  });
 });

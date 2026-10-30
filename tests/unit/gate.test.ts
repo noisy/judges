@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shouldBlock } from '../../src/gate.js';
+import { gateOutcome, shouldBlock } from '../../src/gate.js';
 import { Issue, JudgeResult, JudgeStatus } from '../../src/types.js';
 
 function result(status: JudgeStatus, severities: Issue['severity'][] = []): JudgeResult {
@@ -41,5 +41,25 @@ describe('shouldBlock', () => {
 
   it('does not block on an unknown threshold', () => {
     expect(shouldBlock([result('ok', ['high'])], 'critical')).toBe(false);
+  });
+});
+
+describe('gateOutcome', () => {
+  const finished = result('ok', ['medium']);
+  const stopped = result('stopped');
+
+  it('passes when nothing blocks and no rule stopped', () => {
+    expect(gateOutcome([result('ok'), result('error'), result('skipped')], 'low', 'warn')).toBe('passed');
+  });
+
+  it('warns on a stopped rule by default, fails on it with fail, and ignores it with ignore', () => {
+    expect(gateOutcome([result('ok'), stopped], undefined, 'warn')).toBe('stopped');
+    expect(gateOutcome([result('ok'), stopped], undefined, 'fail')).toBe('blocked-by-stop');
+    expect(gateOutcome([result('ok'), stopped], undefined, 'ignore')).toBe('passed');
+  });
+
+  it('lets a blocking finding win over a stopped rule', () => {
+    expect(gateOutcome([finished, stopped], 'medium', 'warn')).toBe('blocked-by-findings');
+    expect(gateOutcome([finished, stopped], 'medium', 'fail')).toBe('blocked-by-findings');
   });
 });
