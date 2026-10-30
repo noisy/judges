@@ -14,8 +14,8 @@ export interface Judge {
   timeout_seconds: number;
   max_budget_usd?: number;
   scope: string[];
-  severity: 'low' | 'medium' | 'high';
   stage: Stage;
+  severity: 'low' | 'medium' | 'high';
   check: 'judge' | 'deterministic';
   model?: string;
   tools: string[];
