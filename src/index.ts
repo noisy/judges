@@ -13,6 +13,8 @@ import { groupByRule, formatInventory } from './inventory.js';
 import { formatIssuesList, formatJudgeFailure } from './format.js';
 import { shouldBlock } from './gate.js';
 import { pairReports, reportsUsageError, writeReports } from './reports/index.js';
+import { withoutRuleFixtures } from './fixtures.js';
+import { testRules, testExitCode, formatTestResults } from './rule-test.js';
 import colors from 'picocolors';
 import { createRequire } from 'module';
 
@@ -81,6 +83,11 @@ async function main() {
     return;
   }
 
+  if (config.command === 'test') {
+    await runRuleTests(judges, config);
+    return;
+  }
+
   if (judges.length === 0) {
     console.log("No judges found in ~/.judge/judges/, ./.judge/judges/ or --rules directories");
     return;
@@ -88,7 +95,7 @@ async function main() {
 
   let inputContext: EvaluationContext;
   try {
-    inputContext = resolveInputContext(config);
+    inputContext = withoutRuleFixtures(resolveInputContext(config), loaded);
   } catch (error: any) {
     // A usage error is reported even with --json: there is no report to carry it.
     if (error instanceof UsageError) {
@@ -131,8 +138,29 @@ function loadJudgesOrExit(config: AppConfig): { loaded: Judge[]; selected: Judge
     return { loaded, selected };
   } catch (error: any) {
     console.error(colors.red(`❌ Error: ${error.message}`));
-    process.exit(error instanceof UsageError ? USAGE_ERROR_EXIT_CODE : 1);
+    process.exit(error instanceof UsageError || config.command === 'test' ? USAGE_ERROR_EXIT_CODE : 1);
   }
+}
+
+// Runs each valid rule on its fixtures; the exit code says whether every fixture passed.
+async function runRuleTests(judges: Judge[], config: AppConfig): Promise<void> {
+  const validJudges = judges.filter(j => {
+    if (!j.isValid) {
+      if (!config.json) {
+        console.warn(colors.yellow(`⚠ skipping ${j.filePath} — invalid:\n  └─ ${j.validationErrors.join('\n  └─ ')}`));
+      }
+      return false;
+    }
+    return true;
+  });
+  const entries = await testRules(validJudges, config.engine);
+  if (entries.length === 0) {
+    console.error(colors.red('❌ Error: no valid rule files to test; pass a rules directory with --rules <dir>'));
+    process.exit(USAGE_ERROR_EXIT_CODE);
+  }
+  console.log(config.json ? JSON.stringify(entries, null, 2) : formatTestResults(entries));
+  // Not process.exit: it can cut off a long report still being written to a pipe.
+  process.exitCode = testExitCode(entries);
 }
 
 // Lists markers in the given paths, or in the whole repository by default.
@@ -228,6 +256,7 @@ function printHelp(): void {
   console.log(`
 Usage: judge [options] [paths...]
        judge markers [paths...] [--json]   List rule-ignore / rule-todo markers, grouped by rule
+       judge test [--rules <dir>] [--only <id>] [--json]   Run each rule on its fixtures (<dir>/<id>.fixtures/)
 
 Options:
   --file, -f   Evaluate a specific file or files instead of git diff

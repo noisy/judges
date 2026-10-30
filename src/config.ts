@@ -27,7 +27,7 @@ export interface AppConfig {
   root?: string;
   formats: string[]; // report formats, paired in order with outputs
   outputs: string[];
-  command?: 'config' | 'markers';
+  command?: 'config' | 'markers' | 'test';
   configAction?: 'check' | 'list' | 'show' | 'which';
   configTarget?: string;
 }
@@ -82,7 +82,7 @@ export function parseArgs(argv: string[]): AppConfig {
     if (isNaN(visibleIssueLimit)) visibleIssueLimit = DEFAULT_MAX_ISSUES_TO_SHOW;
   }
 
-  let command: 'config' | 'markers' | undefined;
+  let command: 'config' | 'markers' | 'test' | undefined;
   let configAction: 'check' | 'list' | 'show' | 'which' | undefined;
   let configTarget: string | undefined;
 
@@ -91,6 +91,9 @@ export function parseArgs(argv: string[]): AppConfig {
   if (paths[0] === 'markers') {
     command = 'markers';
     paths.shift(); // remove 'markers'
+  } else if (paths[0] === 'test') {
+    command = 'test';
+    paths.shift(); // remove 'test'
   } else if (paths[0] === 'config') {
     command = 'config';
     paths.shift(); // remove 'config'

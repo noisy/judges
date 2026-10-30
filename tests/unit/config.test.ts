@@ -29,6 +29,16 @@ describe('CLI Configuration Parsing', () => {
     expect(parseArgs(['--only', 'a', '--only', 'b']).only).toEqual(['a', 'b']);
   });
 
+  it('should parse `judge test` as the test command with the rule flags of a review', () => {
+    const args = parseArgs(['test', '--rules', 'rules', '--only', 'a', '--engine', 'codex', '--json']);
+    expect(args.command).toBe('test');
+    expect(args.paths).toEqual([]);
+    expect(args.ruleDirs).toEqual(['rules']);
+    expect(args.only).toEqual(['a']);
+    expect(args.engine).toBe('codex');
+    expect(args.json).toBe(true);
+  });
+
   it('should parse the --top option', () => {
     const args = parseArgs(['--top', '5']);
     expect(args.visibleIssueLimit).toBe(5);

@@ -166,3 +166,34 @@ Checks every loaded judge and rule. Exits `0` if all are valid, exits `1` and pr
 judge config --check naming-conventions
 \`\`\`
 Only validates the judge whose directory matches exactly \`naming-conventions\`.
+
+## Testing rules with fixtures
+
+A rule can ship with fixtures: tiny repositories next to the rule file, in `<dir>/<id>.fixtures/`. A directory named `violation` or `violation-<name>` breaks the rule; one named `pass` or `pass-<name>` follows it. Files directly in `<id>.fixtures/`, like a README, are ignored.
+
+```
+rules/
+  error-messages-say-what-to-do.md
+  error-messages-say-what-to-do.fixtures/
+    violation/src/config.py
+    violation-missing-file/src/settings.py
+    pass/src/config.py
+```
+
+A violation fixture may mark the lines it expects findings on, with the comment syntax of [markers](markers.md). Like a line marker, it covers the next line that is neither blank nor another marker:
+
+```python
+def load_port(value):
+    if not value.isdigit():
+        # rule-expect: error-messages-say-what-to-do
+        raise ValueError("invalid port")
+```
+
+```bash
+judge test --rules rules
+judge test --rules rules --only error-messages-say-what-to-do --json
+```
+
+Each fixture is one run of its rule alone, reviewing all files of a temporary copy of the fixture as the repository root: paths and scope are relative to the fixture, and the rule's model, mode and budget apply. The `rule-expect` lines are blanked in the copy, so the rule never sees them and line numbers do not move. A fixture passes only when the rule ran with status `ok` and a violation fixture got a finding (on every marked line and on no other line, when it marks lines), or a pass fixture got none. A failure starts with a reason code: `did-not-run`, `missed`, `wrong-line`, `false-positive` or `bad-name`. A rule without fixtures is skipped. `judge test` exits `0` when every fixture passed, `1` when one failed, `2` on a usage error such as an unknown `--only` id. `--json` prints one review result per fixture, with `fixture`, `expect`, `result` (`passed`, `failed` or `skipped`) and `reason`.
+
+A review leaves out the files under `<id>.fixtures/` of every loaded rule, so a rule with a wide scope never flags its own violation fixture.
