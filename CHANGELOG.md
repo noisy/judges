@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-10-30)
+
+A rule can set how hard the model thinks, and a rule cut short by a limit now says so plainly.
 
 ### Limits
 - A rule that hits its time, turn or cost limit gets status `stopped` with `stopReason: time | turns | cost`, instead of `timeout` or `error`. It reports no findings and never blocks. The human report says `stopped (<reason>)` and the limit; JUnit reports it as an error; in `judge test` it fails with `did-not-run`. `error` is now only for real errors.
