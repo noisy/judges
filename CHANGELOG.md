@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-10-31)
+
+The judge says how sure it is of each finding, and a rule can drop the doubtful ones.
 
 ### Confidence
 - The judge gives each finding a `confidence` in percent, a whole number from 0 to 100; the prompt explains the scale. A fraction is rounded, `high`/`medium`/`low` read as 90/60/30, anything else is `null`.
