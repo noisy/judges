@@ -12,7 +12,7 @@ export class EngineStoppedError extends Error {
 }
 
 export type OutputInterpretation = Omit<EngineResponse, 'durationMs'>;
-export type EngineUsage = Pick<EngineResponse, 'costUsd' | 'turns' | 'examined'>;
+export type EngineUsage = Pick<EngineResponse, 'costUsd' | 'costEstimated' | 'tokens' | 'tokensEstimated' | 'turns' | 'examined'>;
 
 interface CliAdapter {
   name: SupportedEngine;

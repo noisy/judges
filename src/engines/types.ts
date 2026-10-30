@@ -1,4 +1,4 @@
-import { ExaminedTarget, SupportedEngine } from '../types.js';
+import { ExaminedTarget, SupportedEngine, TokenUsage } from '../types.js';
 
 export interface EngineRequest {
   prompt: string;
@@ -16,6 +16,9 @@ export interface EngineRequest {
 export interface EngineResponse {
   rawOutput: string;
   costUsd?: number;
+  costEstimated?: boolean;
+  tokens?: TokenUsage;
+  tokensEstimated?: boolean;
   turns?: number;
   examined?: ExaminedTarget[];
   durationMs: number;

@@ -51,7 +51,7 @@ judge -f src/index.ts src/utils.ts
 - `--full`: Show all issues found by judges.
 - `--top <X>`: Show the top X issues per judge (Default: 3).
 - `--engine <name>`: Choose the AI engine to execute. Supported: `claude` (default) and `codex`.
-- `--json`, `-j`: Output results in exact JSON format (for agents).
+- `--json`, `-j`: Output results in exact JSON format (for agents): one record per rule, then the run totals. See [JSON output and cost](#json-output-and-cost).
 - `--on-stop <warn|fail|ignore>`: What a rule stopped by its time, turn or cost limit does to the exit code. `warn` (default) exits 3 when nothing blocked, `fail` exits 1, `ignore` keeps the exit code. See [Exit codes](#exit-codes).
 - `--stage <name>`: Run only the rules of one gate: `commit` (rules without `stage` too), `push`, or `ci` (every rule). Rules of another stage are reported as skipped. Without it, every rule runs.
 - `--format <gitlab|sarif|junit> --output <path>`: Also write the findings as a CI report (see [Reports for CI](#reports-for-ci)). Repeatable.
@@ -125,6 +125,29 @@ judges:
   allow_failure:
     exit_codes: [3]
 ```
+
+### JSON output and cost
+
+`--json` prints one array: a record per rule, then a last entry with the totals of the run. The last entry has no `judgeId`, so a script that reads rule records by their fields skips it; a script that counts the entries counts one more.
+
+```json
+[
+  { "judgeId": "no-print", "status": "ok", "tokens": { "input": 1200, "cacheCreation": 0, "cacheRead": 800, "output": 40 }, "tokensEstimated": false, "costUsd": 0.0123, "costEstimated": false, "...": "..." },
+  { "run": { "tokens": { "input": 2400, "cacheCreation": 0, "cacheRead": 1600, "output": 80 }, "tokensEstimated": false, "costUsd": 0.0246, "costEstimated": false } }
+]
+```
+
+- **Tokens.** Each rule that called the model records `tokens` in four parts: fresh input, cache writes, cache reads and output. A part is `null` when judges cannot know it; `codex` and `gemini` report none.
+- **Cost.** `costUsd` is claude's own number. When a rule is stopped on its time limit, claude never says it, so judges counts the tokens from the stream it read and estimates the cost from a price table it ships (`src/engines/prices.ts`). Then `tokensEstimated` and `costEstimated` say so. A model the table does not know gives `costUsd: null`, never a guess.
+- **Run totals.** Each part and the cost are summed over the rules that called the model. One unknown value makes that total `null`.
+
+The human report ends with one line for the run, when a rule called the model:
+
+```
+Cost: $0.0246 at API prices (4.1k tokens, 40% cache reads). On a Claude subscription the real cost is lower.
+```
+
+All costs are at API list prices, as claude reports them. On an API key that is what you pay; on a Claude subscription the real cost is lower. `≈` marks an estimate, and `unknown` a total that cannot be known.
 
 ### Reports for CI
 

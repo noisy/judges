@@ -10,7 +10,8 @@ import { buildPlan } from './plan.js';
 import { auditMarkers } from './marker-audit.js';
 import { findMarkersInFiles } from './markers.js';
 import { groupByRule, formatInventory } from './inventory.js';
-import { formatIssuesList, formatJudgeFailure } from './format.js';
+import { formatCostLine, formatIssuesList, formatJudgeFailure } from './format.js';
+import { calledModel, runTotals } from './run-totals.js';
 import { GateOutcome, gateOutcome, stoppedRules } from './gate.js';
 import { pairReports, reportsUsageError, writeReports } from './reports/index.js';
 import { withoutRuleTests } from './rule-test-spec.js';
@@ -112,7 +113,8 @@ async function main() {
   const results = await orchestrateEvaluation(judges, inputContext, loaded.map(j => j.id), config);
 
   if (config.json) {
-    console.log(JSON.stringify(results, null, 2));
+    // The totals are one more entry, not a new top-level object, so scripts that read the array keep working.
+    console.log(JSON.stringify([...results, { run: runTotals(results) }], null, 2));
   }
 
   // Before the gate can exit, so a blocked pipeline still has its reports.
@@ -261,6 +263,7 @@ function printHumanReadableResults(results: JudgeResult[], config: AppConfig): v
       }
     }
   }
+  if (results.some(calledModel)) console.log(`\n${formatCostLine(runTotals(results))}`);
   console.log(colors.bold("\n--- Done ---\n"));
 }
 

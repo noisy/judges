@@ -35,6 +35,17 @@ export interface ExaminedTarget {
   denied?: boolean; // the sandbox refused it, e.g. a path outside the repository
 }
 
+// The tokens of a rule's model calls, each part summed over its messages. Cache reads cost far less than fresh
+// input, so the parts stay apart. A part is null when the tool cannot know it.
+export interface TokenUsage {
+  input: number | null; // input not served from the cache
+  cacheCreation: number | null; // input written to the cache
+  cacheRead: number | null; // input read from the cache
+  output: number | null;
+}
+
+export const UNKNOWN_TOKENS: TokenUsage = { input: null, cacheCreation: null, cacheRead: null, output: null };
+
 export type JudgeStatus = 'ok' | 'error' | 'stopped' | 'skipped';
 
 // The limit that ended a `stopped` rule: its time limit, its turn cap or its cost cap.
@@ -53,7 +64,10 @@ export interface JudgeResult {
   outsideDiff?: number; // findings dropped because none of their lines is an added line of the diff
   dismissed?: number; // entries dropped because their message says the code follows the rule
   durationMs: number;
-  costUsd?: number | null; // null when the engine never said it, e.g. on a time stop
+  costUsd?: number | null; // the engine's own cost, or an estimate on a time stop; null when unknown
+  costEstimated?: boolean; // costUsd is the tool's estimate from the tokens and its price table
+  tokens?: TokenUsage; // set for every rule that called the model
+  tokensEstimated?: boolean; // output includes a count from the text of a message cut off by a time stop
   turns?: number | null;
   inline?: string[]; // files given to the judge in the prompt
   examined?: ExaminedTarget[]; // what an agent judge read or searched on its own
