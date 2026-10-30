@@ -34,6 +34,8 @@ const SECONDS_PER_UNIT: Record<string, number> = { s: 1, m: 60 };
 // The sandbox grants whole directories, so a narrower glob would promise less than it grants.
 const ALLOW_READ_PATTERN = /^[^*?[\]{}]+?(\/\*\*)?$/;
 const ALLOW_READ_ERROR = '`allow_read` entries must be a directory, optionally ending in /** (relative to the repo root, absolute, or ~/)';
+const MIN_CONFIDENCE_ERROR = '`min_confidence` must be a whole number from 0 to 100';
+const MAX_CONFIDENCE = 100;
 const BUDGET_FORMAT_ERROR = '`budget` must look like "30s, $0.10" (time in s or m, cost in $, either part optional)';
 // A team that relied on its command must learn that it never runs, so these fields are rejected, not ignored.
 const NOT_A_RULE_FIELD = 'is not a rule field: every rule is checked by a model, and judges runs no commands. A check a linter or a test can do belongs there';
@@ -65,6 +67,10 @@ const settingsFields = {
   check: z.never({ error: `\`check\` ${NOT_A_RULE_FIELD}` }).optional(),
 
   model: z.string().min(1, '`model` cannot be empty').optional(),
+
+  min_confidence: z.number({ error: MIN_CONFIDENCE_ERROR }).int(MIN_CONFIDENCE_ERROR)
+    .min(0, MIN_CONFIDENCE_ERROR).max(MAX_CONFIDENCE, MIN_CONFIDENCE_ERROR)
+    .optional(),
 
   effort: z.enum(EFFORTS, { error: `\`effort\` must be one of: ${EFFORTS.join(', ')}` }).optional(),
 

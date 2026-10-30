@@ -184,6 +184,27 @@ describe('runPlan outcome mapping', () => {
   });
 });
 
+describe('runPlan with min_confidence', () => {
+  beforeEach(() => {
+    run.mockReset();
+    vi.mocked(getEngine).mockReturnValue({ name: 'claude', isAvailable: () => true, run });
+  });
+
+  it('reports the findings at or over the threshold, and lists the others apart', async () => {
+    const issues = [
+      { file: 'a.ts', line: 1, severity: 'low', message: 'clear', confidence: 90 },
+      { file: 'a.ts', line: 2, severity: 'low', message: 'doubtful', confidence: 'low' },
+      { file: 'a.ts', line: 3, severity: 'low', message: 'no confidence' }
+    ];
+    run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
+
+    const [result] = await runPlan([{ ...planned(), judge: { ...judge, min_confidence: 70 } as Judge }], 'claude');
+
+    expect(result.issues.map((issue) => [issue.message, issue.confidence])).toEqual([['clear', 90], ['no confidence', null]]);
+    expect(result.belowThreshold?.map((issue) => [issue.message, issue.confidence])).toEqual([['doubtful', 30]]);
+  });
+});
+
 describe('runPlan with markers', () => {
   const marker: Marker = { kind: 'exception', ruleId: 'srp', reason: 'external schema', file: 'a.ts', markerLine: 1 };
 
@@ -202,8 +223,18 @@ describe('runPlan with markers', () => {
     const [result] = await runPlan([planned([marker])], 'claude');
 
     expect(result.issues.map((i) => i.message)).toEqual(['right below, not covered']);
-    expect(result.covered).toEqual([{ file: 'a.ts', line: 9, severity: 'high', message: 'covered far below', covered_by: 'a.ts:1' }]);
+    expect(result.covered).toEqual([{ file: 'a.ts', line: 9, severity: 'high', message: 'covered far below', confidence: null, covered_by: 'a.ts:1' }]);
     expect(result.suppressed).toBe(1);
+  });
+
+  it('keeps a covered finding covered, whatever its confidence', async () => {
+    const issues = [{ file: 'a.ts', line: 9, severity: 'high', message: 'covered', confidence: 10, covered_by: './a.ts:1' }];
+    run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
+
+    const [result] = await runPlan([planned([marker])], 'claude');
+
+    expect(result.covered).toHaveLength(1);
+    expect(result.belowThreshold).toEqual([]);
   });
 
   it('reports a finding whose covered_by names no marker of the prompt, without the covered_by', async () => {

@@ -139,6 +139,7 @@ judges:
 
 - **Tokens.** Each rule that called the model records `tokens` in four parts: fresh input, cache writes, cache reads and output. A part is `null` when judges cannot know it; `codex` and `gemini` report none.
 - **Cost.** `costUsd` is claude's own number. When a rule is stopped on its time limit, claude never says it, so judges counts the tokens from the stream it read and estimates the cost from a price table it ships (`src/engines/prices.ts`). Then `tokensEstimated` and `costEstimated` say so. A model the table does not know gives `costUsd: null`, never a guess.
+- **Confidence.** Each finding has a `confidence` in percent, 0 to 100. A rule with `min_confidence` lists the findings under it in `belowThreshold` instead of reporting them. See [Confidence](docs/judge-format.md#confidence).
 - **Run totals.** Each part and the cost are summed over the rules that called the model. One unknown value makes that total `null`.
 
 The human report ends with one line for the run, when a rule called the model:

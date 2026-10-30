@@ -75,9 +75,16 @@ Your output must be a JSON array of objects. Each object represents an issue you
     "file": "string (the filepath of the file with the issue, or global if it's general)",
     "line": "number | string (the line number, or range, or 'N/A')",
     "severity": "low | medium | high",
-    "message": "string (a detailed explanation of the issue and how to fix it)"
+    "message": "string (a detailed explanation of the issue and how to fix it)",
+    "confidence": "number (how sure you are that this is a violation, in percent: a whole number from 0 to 100)"
   }
 ]
+
+Give each issue a "confidence" on this scale:
+- 90 to 100: a clear violation, the rule says so directly
+- 70: likely, with one small assumption
+- 50: could go either way
+- 30 or less: probably fine, reported only to be safe
 
 Report only violations of the rule. Never add an entry for code that follows the rule, not even as a note.
 If nothing breaks the rule, return an empty array: []

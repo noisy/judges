@@ -11,13 +11,16 @@ export interface RunTotals {
 
 const TOKEN_PARTS = ['input', 'cacheCreation', 'cacheRead', 'output'] as const;
 
+// The parts of a rule's record the totals read: a review result, or the run of a rule test.
+type RunUsage = Pick<JudgeResult, 'tokens' | 'tokensEstimated' | 'costUsd' | 'costEstimated'>;
+
 // Every rule that called the model has tokens in its record; a skipped or invalid rule and the marker audit have none.
-export function calledModel(result: JudgeResult): boolean {
+export function calledModel(result: RunUsage): boolean {
   return result.tokens !== undefined;
 }
 
 // With no rule that called the model, every total is 0.
-export function runTotals(results: JudgeResult[]): RunTotals {
+export function runTotals(results: RunUsage[]): RunTotals {
   const called = results.filter(calledModel);
   const tokens = Object.fromEntries(
     TOKEN_PARTS.map((part) => [part, total(called.map((result) => result.tokens?.[part] ?? null))])

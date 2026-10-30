@@ -20,6 +20,7 @@ export interface Judge {
   severity: 'low' | 'medium' | 'high';
   model?: string;
   effort?: Effort;
+  min_confidence?: number; // findings under it are not reported
   tools: string[];
   allow_read: string[]; // directories outside the repo an agent judge may read
   max_turns?: number;

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Confidence
+- The judge gives each finding a `confidence` in percent, a whole number from 0 to 100; the prompt explains the scale. A fraction is rounded, `high`/`medium`/`low` read as 90/60/30, anything else is `null`.
+- New optional rule field `min_confidence` (a whole number from 0 to 100; anything else makes the rule invalid). A finding under it is not reported, never blocks and is not in CI reports; `--json` lists it in the rule's `belowThreshold`, and the summary line says how many were dropped. A finding without a confidence is never dropped, and a finding a marker covers stays covered.
+- `judge test` applies `min_confidence` to the verdict, and after each rule's tests shows the lowest confidence of a needed finding and the highest of a forbidden one: `<rule>: needed findings 82 or more, forbidden 41 or less`. `--json` adds `{ "rule", "calibration": { "neededMin", "forbiddenMax" } }` after the rule's test entries; a script that counts the entries counts one more per rule with tests.
+- `judge test` ends with the cost line of its runs, as a review does.
+
 ## 0.5.0 (2026-10-30)
 
 A run now says what it cost, and a rule stopped by a limit can turn the CI job into a warning.
