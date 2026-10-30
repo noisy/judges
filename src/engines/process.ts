@@ -1,18 +1,11 @@
 import { spawn, spawnSync } from 'child_process';
-import { SupportedEngine } from '../types.js';
+import { StopReason, SupportedEngine } from '../types.js';
 import { Engine, EngineRequest, EngineResponse } from './types.js';
 
-export class TimeoutError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'TimeoutError';
-  }
-}
-
-// A run the CLI ended itself, on a limit or an error. What it reported having spent and examined
-// stays in the record: money spent on a failed rule is still money spent.
+// A run that ended before its answer: on a limit (`stopReason` says which) or on an error the CLI reported.
+// What it spent and examined stays in the record: money spent on a rule that did not finish is still spent.
 export class EngineStoppedError extends Error {
-  constructor(message: string, readonly usage: EngineUsage) {
+  constructor(message: string, readonly usage: EngineUsage, readonly stopReason?: StopReason) {
     super(message);
     this.name = 'EngineStoppedError';
   }
@@ -32,12 +25,17 @@ interface CliAdapter {
   explainFailure?(stdout: string, req: EngineRequest): string | undefined;
   // Cost, turns and tool calls a failed run still reported.
   reportedUsage?(stdout: string, req: EngineRequest): EngineUsage;
+  // What a run killed on its time limit had used, read from what it printed before the kill.
+  usageBeforeKill?(stdout: string, req: EngineRequest): EngineUsage;
+  // The limit the CLI says it stopped on, read from its own output.
+  stopReason?(stdout: string, req: EngineRequest): StopReason | undefined;
 }
 
 interface CliResult {
   exitCode: number | null;
   stdout: string;
   stderr: string;
+  timedOut: boolean;
 }
 
 export function createCliEngine(adapter: CliAdapter): Engine {
@@ -56,8 +54,13 @@ export function createCliEngine(adapter: CliAdapter): Engine {
       const args = adapter.buildArgs({ ...req, prompt: stripNullBytes(req.prompt) });
       const startedAt = Date.now();
       const result = await runCli(adapter.name, args, req.timeoutMs, adapter.workingDir?.(req));
+      if (result.timedOut) {
+        const usage = adapter.usageBeforeKill?.(result.stdout, req) ?? {};
+        throw new EngineStoppedError(`${adapter.name} CLI timed out after ${req.timeoutMs / 1000} seconds.`, usage, 'time');
+      }
       if (result.exitCode !== 0 && result.exitCode !== null) {
-        throw exitError(adapter.name, result, adapter.explainFailure?.(result.stdout, req), adapter.reportedUsage?.(result.stdout, req));
+        throw exitError(adapter.name, result, adapter.explainFailure?.(result.stdout, req),
+          adapter.reportedUsage?.(result.stdout, req), adapter.stopReason?.(result.stdout, req));
       }
       return { ...adapter.interpretOutput(result.stdout, req), durationMs: Date.now() - startedAt };
     }
@@ -74,6 +77,7 @@ function stripNullBytes(text: string): string {
   return text.replace(/\0/g, '');
 }
 
+// A run past its time limit is killed, and resolves with what it printed so far.
 function runCli(command: string, args: string[], timeoutMs: number, cwd?: string): Promise<CliResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], cwd });
@@ -83,7 +87,7 @@ function runCli(command: string, args: string[], timeoutMs: number, cwd?: string
 
     const timeoutRef = setTimeout(() => {
       child.kill('SIGTERM');
-      reject(new TimeoutError(`${command} CLI timed out after ${timeoutMs / 1000} seconds.`));
+      resolve({ exitCode: null, stdout: stdoutData.trim(), stderr: stderrData.trim(), timedOut: true });
     }, timeoutMs);
 
     child.stdout.on('data', (data) => {
@@ -101,14 +105,20 @@ function runCli(command: string, args: string[], timeoutMs: number, cwd?: string
 
     child.on('close', (code) => {
       clearTimeout(timeoutRef);
-      resolve({ exitCode: code, stdout: stdoutData.trim(), stderr: stderrData.trim() });
+      resolve({ exitCode: code, stdout: stdoutData.trim(), stderr: stderrData.trim(), timedOut: false });
     });
   });
 }
 
-function exitError(command: string, result: CliResult, explanation?: string, usage: EngineUsage = {}): Error {
+function exitError(
+  command: string,
+  result: CliResult,
+  explanation?: string,
+  usage: EngineUsage = {},
+  stopReason?: StopReason
+): Error {
   if (explanation) {
-    return new EngineStoppedError(`${command} CLI stopped: ${explanation}`, usage);
+    return new EngineStoppedError(`${command} CLI stopped: ${explanation}`, usage, stopReason);
   }
   const details = result.stderr || result.stdout;
   if (details.includes("You've hit your usage limit") || details.toLowerCase().includes('rate limit')) {

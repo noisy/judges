@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Limits
+- A rule that hits its time, turn or cost limit gets status `stopped` with `stopReason: time | turns | cost`, instead of `timeout` or `error`. It reports no findings and never blocks. The human report says `stopped (<reason>)` and the limit; JUnit reports it as an error; in `judge test` it fails with `did-not-run`. `error` is now only for real errors.
+- The `--json` record of a rule that ran always has `turns`, `costUsd` and `durationMs`, also when it stopped. `costUsd` is `null` when the engine never said it, such as on a time stop. On a time stop an agent's turns are counted from the stream before the kill; a one-shot rule counts as 1 turn.
+
 ### Rules
 - New optional rule field `effort: low | medium | high | xhigh | max`: how hard the model thinks. `claude` gets `--effort <level>` for one-shot and agent rules; a rule without it gets no flag. `codex` and `gemini` ignore it. Any other value makes the rule invalid, and the other rules still run. `--json` records each rule's `effort`.
 

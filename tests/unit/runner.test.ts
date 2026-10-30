@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runPlan, buildEngineRequest, attributeToRule } from '../../src/runner.js';
-import { getEngine, Engine, EngineStoppedError, TimeoutError } from '../../src/engines/index.js';
+import { getEngine, Engine, EngineStoppedError } from '../../src/engines/index.js';
 import { Judge } from '../../src/judges.js';
 import { PlanItem } from '../../src/plan.js';
 import { Marker } from '../../src/markers.js';
@@ -19,6 +19,7 @@ const judge = {
   id: 'srp',
   name: 'SRP Validator',
   instructions: 'Check SRP.',
+  mode: 'one-shot',
   timeout_seconds: 30,
   tools: [],
   filePath: '/judges/srp/JUDGE.md'
@@ -107,14 +108,30 @@ describe('runPlan outcome mapping', () => {
     expect(result.error).toContain('Failed to parse LLM output');
   });
 
-  it('maps a timeout to status timeout without issues', async () => {
-    run.mockRejectedValue(new TimeoutError('claude CLI timed out after 30 seconds.'));
+  it('maps a run killed on its time limit to stopped on time, with one turn and an unknown cost', async () => {
+    run.mockRejectedValue(new EngineStoppedError('claude CLI timed out after 30 seconds.', {}, 'time'));
 
     const [result] = await runPlan([planned()], 'claude');
 
-    expect(result.status).toBe('timeout');
-    expect(result.issues).toEqual([]);
-    expect(result.error).toContain('timed out');
+    expect(result).toMatchObject({ status: 'stopped', stopReason: 'time', issues: [], turns: 1, costUsd: null,
+      error: 'claude CLI timed out after 30 seconds.' });
+    expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps the turns an agent took before its time stop', async () => {
+    run.mockRejectedValue(new EngineStoppedError('claude CLI timed out after 1 seconds.', { turns: 2 }, 'time'));
+
+    const [result] = await runPlan([{ ...planned(), judge: { ...judge, mode: 'agent' } as Judge }], 'claude');
+
+    expect(result).toMatchObject({ status: 'stopped', stopReason: 'time', turns: 2, costUsd: null });
+  });
+
+  it('records the cost as unknown and one turn for a one-shot run whose engine says neither', async () => {
+    run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
+
+    const [result] = await runPlan([planned()], 'claude');
+
+    expect(result).toMatchObject({ status: 'ok', turns: 1, costUsd: null });
   });
 
   it('maps a generic error to status error without issues', async () => {
@@ -129,13 +146,23 @@ describe('runPlan outcome mapping', () => {
 
   it('keeps the cost, turns and examined targets of a run stopped on a limit', async () => {
     const usage = { costUsd: 0.034, turns: 2, examined: [{ tool: 'Read', target: 'tests/test_greet.py' }] };
-    run.mockRejectedValue(new EngineStoppedError('claude CLI stopped: turn limit reached (2)', usage));
+    run.mockRejectedValue(new EngineStoppedError('claude CLI stopped: turn limit reached (2)', usage, 'turns'));
 
     const [result] = await runPlan([planned()], 'claude');
 
-    expect(result.status).toBe('error');
+    expect(result.status).toBe('stopped');
+    expect(result.stopReason).toBe('turns');
     expect(result.error).toBe('claude CLI stopped: turn limit reached (2)');
     expect(result).toMatchObject({ ...usage, inline: ['a.ts'] });
+  });
+
+  it('keeps an error the engine reported as an error, with what it spent', async () => {
+    run.mockRejectedValue(new EngineStoppedError('claude CLI stopped: boom', { costUsd: 0.01, turns: 1 }));
+
+    const [result] = await runPlan([planned()], 'claude');
+
+    expect(result).toMatchObject({ status: 'error', costUsd: 0.01, turns: 1 });
+    expect(result.stopReason).toBeUndefined();
   });
 });
 

@@ -32,8 +32,8 @@ function testCase(result: JudgeResult, findings: ReportFinding[]): string {
 }
 
 function caseOutcome(result: JudgeResult, findings: ReportFinding[]): string | undefined {
-  if (result.status === 'error' || result.status === 'timeout') {
-    const message = result.status === 'timeout' ? 'timed out' : 'errored';
+  if (result.status === 'error' || result.status === 'stopped') {
+    const message = result.status === 'stopped' ? `stopped (${result.stopReason})` : 'errored';
     return `<error message="${message}" type="${result.status}">${escapeXml(result.error ?? '')}</error>`;
   }
   if (result.status === 'skipped') {
@@ -53,7 +53,7 @@ function countCases(results: JudgeResult[], findings: ReportFinding[]): Counts {
   return {
     tests: results.length,
     failures: ok.filter((r) => failed.has(r.judgeId)).length,
-    errors: results.filter((r) => r.status === 'error' || r.status === 'timeout').length,
+    errors: results.filter((r) => r.status === 'error' || r.status === 'stopped').length,
     skipped: results.filter((r) => r.status === 'skipped').length
   };
 }

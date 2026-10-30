@@ -108,6 +108,21 @@ Intent: every connector has an integration test.
 - **Line numbers.** In both modes file contents are shown as `  17| code` and the judge reports those numbers.
 - **Run record.** The result lists the files given in the prompt as `inline: [paths]` (every judge), and every tool call as `examined: [{ tool, target, denied? }]`. The summary line shows counts, e.g. `(read 2 files, 4 searches)`; `--json` has the full list.
 
+### Stopped by a limit
+
+A rule that hits one of its limits did not finish. It gets status `stopped` and a `stopReason`:
+
+| `stopReason` | The limit | With claude |
+| :--- | :--- | :--- |
+| `time` | `budget` time part or `timeout_seconds` | the call is killed |
+| `turns` | `max_turns` | result `error_max_turns` |
+| `cost` | `budget` cost part | result `error_max_budget_usd` |
+
+- **No findings.** The answer was cut off, so a partial list would look like a full check. A stopped rule never blocks `--fail-on` and does not change the exit code.
+- **What it used.** The `--json` record keeps `turns`, `costUsd` and `durationMs` up to the stop. On a time stop the engine never says its totals: an agent's turns are counted from the stream before the kill, a one-shot rule counts as 1 turn, and `costUsd` is `null`.
+- **Report.** The summary line says `⚠ <rule>: stopped (<stopReason>)` and the limit, e.g. `stopped (turns) after 8 turns`. `error` holds the engine's message. JUnit reports a stopped rule as an `<error>`.
+- **`error` is for real errors.** A bad rule, a crashed engine or an answer that cannot be read is `error`, never `stopped`.
+
 ### Sandbox
 
 Every claude judge runs with:
@@ -257,7 +272,7 @@ A test passes only when the rule ran with status `ok` and every field of the exp
 | Code | When |
 | :--- | :--- |
 | `invalid` | the test itself is broken; the rule did not run |
-| `did-not-run` | the rule ended with status `error`, `timeout` or `skipped` (for example no file in its scope) |
+| `did-not-run` | the rule ended with status `error`, `stopped` or `skipped` (for example no file in its scope) |
 | `missed` | `expect: findings`, but there is no finding |
 | `false-positive` | `expect: clean`, but there is a finding |
 | `must` | a place in `must` has no finding |
@@ -286,7 +301,7 @@ Without `--json`, one line per test: `✔ <rule>/<test> (review)`, `✘ <rule>/<
 ]
 ```
 
-`status` is `passed`, `failed` or `skipped`, `reason` is null for a passed test, and `findings` have paths relative to the test's repository. `run` holds the fields of a review result (`status`, `durationMs`, `costUsd`, `turns`, `inline`, `examined`, `error`, `skipReason`, ...); it is null when the rule was never started: a rule without tests, or an invalid test.
+`status` is `passed`, `failed` or `skipped`, `reason` is null for a passed test, and `findings` have paths relative to the test's repository. `run` holds the fields of a review result (`status`, `stopReason`, `durationMs`, `costUsd`, `turns`, `inline`, `examined`, `error`, `skipReason`, ...); it is null when the rule was never started: a rule without tests, or an invalid test.
 
 ### A review never reviews tests
 
