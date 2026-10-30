@@ -125,7 +125,7 @@ describe('validateRule', () => {
     expect(result.valid).toBe(true);
     expect(result.data).toMatchObject({
       name: 'booleans', description: '', version: '', scope: ['**/*'], severity: 'medium',
-      check: 'judge', tools: [], allow_read: [], timeout_seconds: 30, mode: 'one-shot',
+      check: 'judge', tools: [], allow_read: [], timeout_seconds: 30, mode: 'one-shot', context: 'file',
     });
   });
 
@@ -177,6 +177,66 @@ describe('validateRule', () => {
   });
 });
 
+describe('context', () => {
+  it.each([
+    [{}, 'file', 'one-shot'],
+    [{ context: 'diff' }, 'diff', 'one-shot'],
+    [{ context: 'repo' }, 'repo', 'agent'],
+    [{ mode: 'one-shot' }, 'file', 'one-shot'],
+    [{ mode: 'agent' }, 'repo', 'agent'],
+    [{ mode: 'one-shot', context: 'diff' }, 'diff', 'one-shot'],
+    [{ mode: 'agent', context: 'repo' }, 'repo', 'agent'],
+  ])('resolves %j to context %s, run as %s', (fields, context, mode) => {
+    const result = validateRule({ id: 'r', ...fields }, 'r');
+    expect(result.valid).toBe(true);
+    expect(result.data).toMatchObject({ context, mode });
+  });
+
+  it('gives a repo rule the agent defaults', () => {
+    const result = validateRule({ id: 'r', context: 'repo' }, 'r');
+    expect(result.data).toMatchObject({ tools: ['Read', 'Grep', 'Glob'], max_turns: 8, timeout_seconds: 120 });
+  });
+
+  it('rejects an unknown context', () => {
+    const result = validateRule({ id: 'r', context: 'function' }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('error: `context` must be one of: diff, file, module, repo');
+  });
+
+  it('rejects module, which is not supported yet', () => {
+    const result = validateRule({ id: 'r', context: 'module' }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(['error: `context: module` is not supported yet']);
+  });
+
+  it.each([
+    ['one-shot', 'repo'],
+    ['agent', 'diff'],
+    ['agent', 'file'],
+  ])('rejects mode: %s with context: %s, since it does not guess which one is meant', (mode, context) => {
+    const result = validateRule({ id: 'r', mode, context }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual([`error: \`context: ${context}\` contradicts \`mode: ${mode}\`; set only \`context\``]);
+  });
+
+  it.each([
+    ['tools', ['Read']],
+    ['max_turns', 3],
+    ['allow_read', ['../shared/**']],
+  ])('rejects %s on a diff or file rule, which has no tools', (field, value) => {
+    for (const context of ['diff', 'file']) {
+      const result = validateRule({ id: 'r', context, [field]: value }, 'r');
+      expect(result.valid).toBe(false);
+      expect(result.errors).toEqual([`error: \`${field}\` is only allowed with \`context: repo\` (or \`mode: agent\`)`]);
+    }
+  });
+
+  it('accepts tools, max_turns and allow_read on a repo rule', () => {
+    const result = validateRule({ id: 'r', context: 'repo', tools: ['Grep'], max_turns: 3, allow_read: ['../shared/**'] }, 'r');
+    expect(result.valid).toBe(true);
+  });
+});
+
 describe('mode and tools', () => {
   it('gives an agent read-only tools, a turn cap and a longer timeout by default', () => {
     const result = validateRule({ id: 'r', mode: 'agent' }, 'r');
@@ -198,7 +258,7 @@ describe('mode and tools', () => {
   it('rejects tools on a one-shot rule', () => {
     const result = validateRule({ id: 'r', tools: ['Read'] }, 'r');
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain('error: `tools` is only allowed with `mode: agent`');
+    expect(result.errors).toContain('error: `tools` is only allowed with `context: repo` (or `mode: agent`)');
   });
 
   it.each(['Write', 'Edit', 'Bash', 'WebFetch', 'LS'])('rejects the non-read-only tool %s on any rule', (tool) => {
@@ -232,7 +292,7 @@ describe('mode and tools', () => {
   it('rejects allow_read on a one-shot rule', () => {
     const result = validateRule({ id: 'r', allow_read: ['../billing-service/**'] }, 'r');
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain('error: `allow_read` is only allowed with `mode: agent`');
+    expect(result.errors).toContain('error: `allow_read` is only allowed with `context: repo` (or `mode: agent`)');
   });
 
   it('applies the same checks to JUDGE.md judges', () => {
