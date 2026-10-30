@@ -63,7 +63,8 @@ Your output must be a JSON array of objects. Each object represents an issue you
   }
 ]
 
-If you find absolutely no issues, return an empty array: []
+Report only violations of the rule. Never add an entry for code that follows the rule, not even as a note.
+If nothing breaks the rule, return an empty array: []
 
 File contents are shown with a line number before each line, like \`  17${LINE_NUMBER_SEPARATOR}code\`. Report those numbers in "line"; the prefix is not part of the code.
 `;
