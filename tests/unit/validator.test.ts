@@ -197,16 +197,10 @@ describe('context', () => {
     expect(result.data).toMatchObject({ tools: ['Read', 'Grep', 'Glob'], max_turns: 8, timeout_seconds: 120 });
   });
 
-  it('rejects an unknown context', () => {
-    const result = validateRule({ id: 'r', context: 'function' }, 'r');
+  it.each(['module', 'function'])('rejects the unknown context %s', (context) => {
+    const result = validateRule({ id: 'r', context }, 'r');
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain('error: `context` must be one of: diff, file, module, repo');
-  });
-
-  it('rejects module, which is not supported yet', () => {
-    const result = validateRule({ id: 'r', context: 'module' }, 'r');
-    expect(result.valid).toBe(false);
-    expect(result.errors).toEqual(['error: `context: module` is not supported yet']);
+    expect(result.errors).toEqual(['error: `context` must be one of: diff, file, repo']);
   });
 
   it.each([

@@ -18,10 +18,9 @@ const DEFAULT_TIMEOUT_SECONDS = 30;
 const DEFAULT_AGENT_TIMEOUT_SECONDS = 120;
 const DEFAULT_AGENT_TOOLS: string[] = ['Read', 'Grep', 'Glob'];
 const DEFAULT_AGENT_MAX_TURNS = 8;
-// How much the model sees. `diff` and `file` run as one call with no tools; `module` and `repo` as an agent.
-export const CONTEXTS = ['diff', 'file', 'module', 'repo'] as const;
+// How much the model sees. `diff` and `file` run as one call with no tools; `repo` as an agent.
+export const CONTEXTS = ['diff', 'file', 'repo'] as const;
 export type Context = typeof CONTEXTS[number];
-const AGENT_CONTEXTS: readonly Context[] = ['module', 'repo'];
 // `mode` is the old way to say `context`; alone, it stands for one context each.
 const CONTEXT_OF_MODE = { 'one-shot': 'file', agent: 'repo' } as const;
 // Judges are read-only by construction: no tool that writes, runs code or reaches the network.
@@ -161,9 +160,6 @@ function checkSettingsConsistency(data: SettingsInput, ctx: z.RefinementCtx): vo
 // `mode` and `context` must agree, since the tool does not guess which one the author meant.
 // A rule without tools (`diff`, `file`) can read nothing, so agent settings on it are a mistake.
 function checkContext(data: SettingsInput, ctx: z.RefinementCtx): void {
-  if (data.context === 'module') {
-    ctx.addIssue({ code: 'custom', path: ['context'], message: '`context: module` is not supported yet' });
-  }
   if (data.mode !== undefined && data.context !== undefined && modeOf(data.context) !== data.mode) {
     ctx.addIssue({ code: 'custom', path: ['context'],
       message: `\`context: ${data.context}\` contradicts \`mode: ${data.mode}\`; set only \`context\`` });
@@ -183,7 +179,7 @@ function contextOf(data: SettingsInput): Context {
 }
 
 function modeOf(context: Context): 'one-shot' | 'agent' {
-  return AGENT_CONTEXTS.includes(context) ? 'agent' : 'one-shot';
+  return context === 'repo' ? 'agent' : 'one-shot';
 }
 
 // `context` decides the defaults: one-shot judges get no tools, agents get read-only tools and a turn cap.
