@@ -6,6 +6,9 @@
 - A run where a rule stopped on its time, turn or cost limit and nothing blocked now exits `3`, and ends with a warning that names the stopped rules. A block still exits `1`, also when a rule stopped. A rule with status `error` or `skipped` does not give `3`. In GitLab CI, `allow_failure: exit_codes: [3]` makes it a warning.
 - New flag `--on-stop warn | fail | ignore`: `warn` (default) as above, `fail` exits `1` on a stopped rule with or without `--fail-on`, `ignore` keeps the exit code of 0.4.0. An unknown value is a usage error (exit `2`) before any rule runs. `judge test` has no `--on-stop` and no exit `3`.
 
+### Output
+- With `--json`, stdout holds only the JSON report, so `judge --json | jq` works. The closing status lines (`Execution blocked ...`, the stopped warning, `No judges found ...`) go to stderr. Without `--json` they stay on stdout, after the report.
+
 ## 0.4.0 (2026-10-30)
 
 A rule can set how hard the model thinks, and a rule cut short by a limit now says so plainly.

@@ -89,7 +89,7 @@ async function main() {
   }
 
   if (judges.length === 0) {
-    console.log("No judges found in ~/.judge/judges/, ./.judge/judges/ or --rules directories");
+    statusPrinter(config)("No judges found in ~/.judge/judges/, ./.judge/judges/ or --rules directories");
     return;
   }
 
@@ -128,13 +128,14 @@ async function main() {
 const GATE_EXIT_CODES: Record<GateOutcome, number> = { passed: 0, 'blocked-by-findings': 1, 'blocked-by-stop': 1, stopped: 3 };
 
 function printGateOutcome(outcome: GateOutcome, results: JudgeResult[], config: AppConfig): void {
+  const print = statusPrinter(config);
   const stopped = stoppedRules(results).map((result) => result.judgeId).join(', ');
   if (outcome === 'blocked-by-findings') {
-    console.log(colors.red(`\n❌ Execution blocked: Issues of severity '${config.failOn}' or higher were found.`));
+    print(colors.red(`\n❌ Execution blocked: Issues of severity '${config.failOn}' or higher were found.`));
   } else if (outcome === 'blocked-by-stop') {
-    console.log(colors.red(`\n❌ Execution blocked: rules stopped on a limit and did not finish (--on-stop fail): ${stopped}`));
+    print(colors.red(`\n❌ Execution blocked: rules stopped on a limit and did not finish (--on-stop fail): ${stopped}`));
   } else if (outcome === 'stopped') {
-    console.log(colors.yellow(`\n⚠ Rules stopped on a limit and did not finish: ${stopped}. Exit code 3 (--on-stop warn).`));
+    print(colors.yellow(`\n⚠ Rules stopped on a limit and did not finish: ${stopped}. Exit code 3 (--on-stop warn).`));
   }
 }
 
@@ -142,6 +143,12 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+// With --json, stdout holds only the JSON report, so `judge --json | jq` works: status lines go to stderr.
+// The human report keeps them on stdout, after the results they sum up.
+function statusPrinter(config: AppConfig): (line: string) => void {
+  return config.json ? console.error : console.log;
+}
 
 // Markers may name any loaded rule, so the full set is kept next to the --only selection.
 function loadJudgesOrExit(config: AppConfig): { loaded: Judge[]; selected: Judge[] } {
