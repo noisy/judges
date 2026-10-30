@@ -4,7 +4,7 @@ import path from 'path';
 import { EngineRequest } from './types.js';
 import { createCliEngine, EngineStoppedError, EngineUsage, OutputInterpretation } from './process.js';
 import { resolveModel } from './models.js';
-import { ExaminedTarget } from '../types.js';
+import { ExaminedTarget, StopReason } from '../types.js';
 
 // Keeps the child from inheriting the developer's MCP servers, settings and sessions.
 const MINIMAL_CONFIG_ARGS = ['--strict-mcp-config', '--setting-sources', '', '--no-session-persistence'];
@@ -32,6 +32,9 @@ const AGENT_OUTPUT_ARGS = ['--output-format', 'stream-json', '--verbose'];
 const ONE_SHOT_OUTPUT_ARGS = ['--output-format', 'json'];
 
 type CliEvent = Record<string, any>;
+
+// The result subtypes that mean the run hit one of the rule's limits, not that something broke.
+const STOP_REASON_OF_SUBTYPE: Record<string, StopReason> = { error_max_turns: 'turns', error_max_budget_usd: 'cost' };
 
 export function buildClaudeArgs(req: EngineRequest): string[] {
   const outputArgs = req.mode === 'agent' ? AGENT_OUTPUT_ARGS : ONE_SHOT_OUTPUT_ARGS;
@@ -91,7 +94,7 @@ export function interpretClaudeOutput(stdout: string, req: EngineRequest): Outpu
   const usage = usageOf(events, envelope, req);
   const failure = describeFailure(envelope, req);
   if (failure) {
-    throw new EngineStoppedError(`claude CLI stopped: ${failure}`, usage);
+    throw new EngineStoppedError(`claude CLI stopped: ${failure}`, usage, STOP_REASON_OF_SUBTYPE[envelope.subtype]);
   }
   return { rawOutput: typeof envelope.result === 'string' ? envelope.result : '', ...usage };
 }
@@ -100,6 +103,18 @@ export function reportedClaudeUsage(stdout: string, req: EngineRequest): EngineU
   const events = parseEvents(stdout);
   const envelope = findResult(events);
   return envelope ? usageOf(events, envelope, req) : {};
+}
+
+// A run killed on its time limit never printed its totals, so an agent's turns and tool calls are read from
+// the stream it printed so far, and the cost stays unknown.
+export function claudeUsageBeforeKill(stdout: string, req: EngineRequest): EngineUsage {
+  if (req.mode !== 'agent') return {};
+  const events = parseEvents(stdout);
+  return { turns: countTurns(events), examined: examinedTargets(events, {}, req.cwd) };
+}
+
+export function claudeStopReason(stdout: string): StopReason | undefined {
+  return STOP_REASON_OF_SUBTYPE[findResult(parseEvents(stdout))?.subtype];
 }
 
 export function explainClaudeFailure(stdout: string, req: EngineRequest): string | undefined {
@@ -136,6 +151,12 @@ function usageOf(events: CliEvent[], envelope: CliEvent, req: EngineRequest): En
   const usage: EngineUsage = { costUsd: asNumber(envelope.total_cost_usd), turns: asNumber(envelope.num_turns) };
   if (req.mode === 'agent') usage.examined = examinedTargets(events, envelope, req.cwd);
   return usage;
+}
+
+// The CLI may print one message as several events, one per content block, all with the message's id.
+function countTurns(events: CliEvent[]): number {
+  const messages = events.filter((event) => event.type === 'assistant').map((event, index) => event.message?.id ?? index);
+  return new Set(messages).size;
 }
 
 function findResult(events: CliEvent[]): CliEvent | undefined {
@@ -184,5 +205,7 @@ export const claudeEngine = createCliEngine({
   supportsAgentMode: true,
   interpretOutput: interpretClaudeOutput,
   explainFailure: explainClaudeFailure,
-  reportedUsage: reportedClaudeUsage
+  reportedUsage: reportedClaudeUsage,
+  usageBeforeKill: claudeUsageBeforeKill,
+  stopReason: claudeStopReason
 });

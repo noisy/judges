@@ -1,4 +1,4 @@
-import { getEngine, EngineRequest, EngineStoppedError, TimeoutError } from './engines/index.js';
+import { getEngine, EngineRequest, EngineStoppedError } from './engines/index.js';
 import { parseLLMOutput } from './llm.js';
 import { constructPrompt } from './prompt.js';
 import { Judge, displayName } from './judges.js';
@@ -11,7 +11,10 @@ import { repoRoot } from './files.js';
 import { EvaluationContext, Issue, JudgeEvent, JudgeResult, SupportedEngine } from './types.js';
 
 type JudgeOutcome = Pick<JudgeResult,
-  'status' | 'issues' | 'covered' | 'suppressed' | 'outsideDiff' | 'dismissed' | 'error' | 'costUsd' | 'turns' | 'examined'>;
+  'status' | 'stopReason' | 'issues' | 'covered' | 'suppressed' | 'outsideDiff' | 'dismissed' | 'error' | 'costUsd' | 'turns'
+  | 'examined'>;
+// A one-shot call is one turn, also when the engine does not say so or was killed before its answer.
+const ONE_SHOT_TURNS = 1;
 export type ProgressListener = (event: JudgeEvent) => void;
 
 export async function runPlan(
@@ -58,18 +61,26 @@ async function runJudge(
     ...judgeIdentity(judge),
     effort: judge.effort,
     status: outcome.status,
+    stopReason: outcome.stopReason,
     issues: outcome.issues,
     covered: outcome.covered,
     suppressed: outcome.suppressed,
     outsideDiff: outcome.outsideDiff,
     dismissed: outcome.dismissed,
     durationMs: Date.now() - startedAt,
-    costUsd: outcome.costUsd,
-    turns: outcome.turns,
+    costUsd: outcome.costUsd ?? null,
+    turns: turnsOf(judge, outcome),
     inline: context.files.map((file) => file.path),
     examined: outcome.examined,
     error: outcome.error
   };
+}
+
+// The record always says how many turns a rule took. Only an error may leave the count unknown: it may have
+// struck before the model was called.
+function turnsOf(judge: Judge, outcome: JudgeOutcome): number | null {
+  if (typeof outcome.turns === 'number') return outcome.turns;
+  return judge.mode === 'one-shot' && outcome.status !== 'error' ? ONE_SHOT_TURNS : null;
 }
 
 function judgeIdentity(judge: Judge): Pick<JudgeResult, 'judgeId' | 'displayName' | 'file'> {
@@ -93,9 +104,10 @@ async function evaluateJudge(
       suppressed: covered.length, outsideDiff, dismissed, costUsd: response.costUsd, turns: response.turns,
       examined: response.examined };
   } catch (error: any) {
-    const status = error instanceof TimeoutError ? 'timeout' : 'error';
-    const usage = error instanceof EngineStoppedError ? error.usage : {};
-    return { status, issues: [], error: error.message, ...usage };
+    if (!(error instanceof EngineStoppedError)) return { status: 'error', issues: [], error: error.message };
+    // A stopped rule reports none of its findings: its answer was cut off, and a partial list looks like a full one.
+    const stopped = error.stopReason ? { status: 'stopped' as const, stopReason: error.stopReason } : { status: 'error' as const };
+    return { ...stopped, issues: [], error: error.message, ...error.usage };
   }
 }
 

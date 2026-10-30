@@ -1,11 +1,13 @@
 import os from 'os';
 import { describe, it, expect } from 'vitest';
-import { buildClaudeArgs, claudeWorkingDir, explainClaudeFailure, interpretClaudeOutput, readAccessArgs, reportedClaudeUsage } from '../../src/engines/claude.js';
-import { EngineStoppedError } from '../../src/engines/process.js';
+import { buildClaudeArgs, claudeStopReason, claudeUsageBeforeKill, claudeWorkingDir, explainClaudeFailure, interpretClaudeOutput,
+  readAccessArgs, reportedClaudeUsage } from '../../src/engines/claude.js';
+import { createCliEngine, EngineStoppedError } from '../../src/engines/process.js';
 import { buildCodexArgs, codexEngine } from '../../src/engines/codex.js';
 import { buildGeminiArgs, geminiEngine } from '../../src/engines/gemini.js';
 import { resolveModel } from '../../src/engines/models.js';
 import { EngineRequest } from '../../src/engines/types.js';
+import { SupportedEngine } from '../../src/types.js';
 
 const baseRequest: EngineRequest = { prompt: 'review this', mode: 'one-shot', timeoutMs: 30000, tools: [], allowRead: [] };
 const agentRequest: EngineRequest = { ...baseRequest, mode: 'agent', tools: ['Read', 'Grep', 'Glob'], cwd: '/repo' };
@@ -179,14 +181,73 @@ describe('interpretClaudeOutput', () => {
 });
 
 function stoppedUsage(run: () => unknown): unknown {
+  return stopOf(run).usage;
+}
+
+function stopOf(run: () => unknown): EngineStoppedError {
   try {
     run();
   } catch (error) {
-    if (error instanceof EngineStoppedError) return error.usage;
+    if (error instanceof EngineStoppedError) return error;
     throw error;
   }
   throw new Error('expected the run to stop');
 }
+
+describe('claude stop reasons', () => {
+  const envelope = (subtype: string) => JSON.stringify({ type: 'result', subtype, is_error: true, errors: ['boom'] });
+
+  it('names the limit a run stopped on, and none for a run that failed', () => {
+    expect(stopOf(() => interpretClaudeOutput(envelope('error_max_turns'), baseRequest)).stopReason).toBe('turns');
+    expect(stopOf(() => interpretClaudeOutput(envelope('error_max_budget_usd'), baseRequest)).stopReason).toBe('cost');
+    expect(stopOf(() => interpretClaudeOutput(envelope('error_during_execution'), baseRequest)).stopReason).toBeUndefined();
+  });
+
+  it('reads the same limit from the output of a failed exit', () => {
+    expect(claudeStopReason(envelope('error_max_turns'))).toBe('turns');
+    expect(claudeStopReason(envelope('error_max_budget_usd'))).toBe('cost');
+    expect(claudeStopReason(envelope('error_during_execution'))).toBeUndefined();
+    expect(claudeStopReason('Segmentation fault')).toBeUndefined();
+  });
+});
+
+describe('claudeUsageBeforeKill', () => {
+  it('counts the turns and tool calls an agent streamed before the kill, and leaves the cost unknown', () => {
+    const stdout = stream(toolUse('t1', 'Glob', { pattern: 'tests/**/*.py' }), toolUse('t2', 'Read', { file_path: '/repo/a.py' }));
+
+    expect(claudeUsageBeforeKill(stdout, agentRequest)).toEqual({
+      turns: 2,
+      examined: [{ tool: 'Glob', target: 'tests/**/*.py' }, { tool: 'Read', target: 'a.py' }]
+    });
+  });
+
+  it('counts a message printed as several events once', () => {
+    const block = (type: string) => JSON.stringify({ type: 'assistant', message: { id: 'msg_1', content: [{ type }] } });
+
+    expect(claudeUsageBeforeKill(stream(block('thinking'), block('text')), agentRequest).turns).toBe(1);
+  });
+
+  it('counts no turns for an agent killed before it printed anything, and leaves one-shot runs to the caller', () => {
+    expect(claudeUsageBeforeKill('', agentRequest)).toEqual({ turns: 0, examined: [] });
+    expect(claudeUsageBeforeKill('', baseRequest)).toEqual({});
+  });
+});
+
+describe('time limit', () => {
+  it('kills the run and stops it on time, with the usage read from what it printed', async () => {
+    const engine = createCliEngine({
+      name: 'sh' as SupportedEngine,
+      buildArgs: () => ['-c', 'echo one; echo two; sleep 5'],
+      interpretOutput: (stdout) => ({ rawOutput: stdout }),
+      usageBeforeKill: (stdout) => ({ turns: stdout.split('\n').length })
+    });
+
+    const stop = await engine.run({ ...baseRequest, timeoutMs: 300 }).catch((error) => error);
+
+    expect(stop).toBeInstanceOf(EngineStoppedError);
+    expect(stop).toMatchObject({ stopReason: 'time', usage: { turns: 2 }, message: 'sh CLI timed out after 0.3 seconds.' });
+  });
+});
 
 describe('explainClaudeFailure', () => {
   it('explains budget and turn limits from the error envelope of a failed exit', () => {
@@ -205,10 +266,11 @@ describe('explainClaudeFailure', () => {
   });
 });
 
+const toolUse = (id: string, name: string, input: object) =>
+  JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } });
+const stream = (...lines: string[]) => lines.join('\n');
+
 describe('interpretClaudeOutput for agent streams', () => {
-  const toolUse = (id: string, name: string, input: object) =>
-    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } });
-  const stream = (...lines: string[]) => lines.join('\n');
 
   it('takes the result from the final event and records every tool call', () => {
     const stdout = stream(

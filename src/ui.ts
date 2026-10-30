@@ -1,7 +1,7 @@
 import logUpdate from 'log-update';
 import colors from 'picocolors';
 import { Judge, displayName } from './judges.js';
-import { ExaminedTarget, Issue, JudgeEvent, JudgeStatus } from './types.js';
+import { ExaminedTarget, Issue, JudgeEvent, JudgeStatus, StopReason } from './types.js';
 
 export type JudgeState = 'pending' | 'running' | 'done';
 
@@ -13,6 +13,7 @@ interface JudgeProgress {
   suppressed?: number;
   examined?: ExaminedTarget[];
   status?: JudgeStatus;
+  stopReason?: StopReason;
   error?: string;
   skipReason?: string;
 }
@@ -36,6 +37,7 @@ export class ProgressRenderer {
     p.state = event.state;
     if (event.state === 'done') {
       p.status = event.result.status;
+      p.stopReason = event.result.stopReason;
       p.issues = event.result.issues;
       p.suppressed = event.result.suppressed;
       p.examined = event.result.examined;
@@ -70,8 +72,8 @@ export class ProgressRenderer {
         output += `  ${colors.yellow(this.frames[this.frameIdx])} ${colors.cyan(p.displayName)} evaluating...\n`;
       } else if (p.state === 'done' && p.status === 'skipped') {
          output += `  ${colors.dim(`○ ${p.displayName}: skipped (${p.skipReason})`)}\n`;
-      } else if (p.state === 'done' && p.status === 'timeout') {
-         output += `  ${colors.yellow('⚠')} ${colors.bold(p.displayName)}: timed out after ${p.judge.timeout_seconds}s\n`;
+      } else if (p.state === 'done' && p.status === 'stopped') {
+         output += `  ${colors.yellow('⚠')} ${colors.bold(p.displayName)}: stopped (${p.stopReason}) ${limitNote(p.judge, p.stopReason)}\n`;
       } else if (p.state === 'done' && p.status === 'error') {
          output += `  ${colors.yellow('⚠')} ${colors.bold(p.displayName)}: error — ${firstLine(p.error)}\n`;
       } else if (p.state === 'done') {
@@ -115,6 +117,13 @@ function severityCounts(issues: Issue[]): string {
     meds > 0 ? colors.yellow(`${meds} Med`) : '',
     lows > 0 ? colors.blue(`${lows} Low`) : ''
   ].filter(Boolean).join(', ');
+}
+
+// The limit the rule set, so the team sees what to raise: "after 30s", "after 8 turns", "over $0.05".
+function limitNote(judge: Judge, reason?: StopReason): string {
+  if (reason === 'time') return `after ${judge.timeout_seconds}s`;
+  if (reason === 'turns') return `after ${judge.max_turns} turns`;
+  return `over $${judge.max_budget_usd}`;
 }
 
 function firstLine(text: string = ''): string {

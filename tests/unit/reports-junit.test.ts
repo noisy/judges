@@ -44,10 +44,11 @@ describe('junitReport', () => {
     expect(xml).toContain('<failure message="2 findings" type="high">src/cart.py:3: one\nsrc/cart.py:9: two</failure>');
   });
 
-  it('writes an error for a rule that errored or timed out', () => {
-    const xml = junitReport([result('a', { status: 'error', error: 'engine crashed' }), result('b', { status: 'timeout', error: 'after 60s' })], []);
+  it('writes an error for a rule that errored or stopped on a limit', () => {
+    const xml = junitReport([result('a', { status: 'error', error: 'engine crashed' }),
+      result('b', { status: 'stopped', stopReason: 'time', error: 'after 60s' })], []);
     expect(xml).toContain('<error message="errored" type="error">engine crashed</error>');
-    expect(xml).toContain('<error message="timed out" type="timeout">after 60s</error>');
+    expect(xml).toContain('<error message="stopped (time)" type="stopped">after 60s</error>');
     expect(xml).toContain('tests="2" failures="0" errors="2" skipped="0"');
   });
 

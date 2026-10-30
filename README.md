@@ -100,7 +100,7 @@ The `--fail-on` flag accepts:
 - `medium` (or `med`): Blocks on `High` or `Medium` severity.
 - `low`: Blocks on virtually any issue found.
 
-Only issues from judges that actually ran count. A judge that errors or times out (e.g. the engine CLI is missing or rate-limited) is reported with a `⚠` warning, but it never blocks the commit.
+Only issues from judges that finished count. A judge that errors (e.g. the engine CLI is missing or rate-limited) or is stopped by its time, turn or cost limit is reported with a `⚠` warning, such as `⚠ my-rule: stopped (turns) after 8 turns`, but it never blocks the commit.
 
 ### Reports for CI
 
@@ -114,6 +114,6 @@ npx judge --staged --fail-on high \
 
 - Outputs are relative to the working directory; missing directories are created. Paths inside the reports are relative to the repository root.
 - Reports are written before the exit, also when `--fail-on` blocks. Findings suppressed by a marker are left out.
-- Severity maps `low`/`medium`/`high` to GitLab `minor`/`major`/`critical` and SARIF `note`/`warning`/`error`. JUnit has one test case per rule.
+- Severity maps `low`/`medium`/`high` to GitLab `minor`/`major`/`critical` and SARIF `note`/`warning`/`error`. JUnit has one test case per rule; a rule that errored or was stopped by a limit is an `<error>`.
 - Each finding's fingerprint is the SHA-256 of its rule id, path and position among that rule's findings in the file, so it stays the same when code above it moves or the message is worded differently.
 - An unknown format, or a `--format` without its `--output`, exits with code 2 before any rule runs.
