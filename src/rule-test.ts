@@ -2,101 +2,102 @@ import * as fs from 'fs';
 import os from 'os';
 import * as path from 'path';
 import colors from 'picocolors';
-import { Judge, displayName } from './judges.js';
-import {
-  ExpectedLine, Fixture, FixtureExpect, FixtureVerdict, Verdict, blankExpectLines, findFixtures, judgeFixture
-} from './fixtures.js';
-import { readContents, walkDirectory } from './files.js';
+import { Judge } from './judges.js';
+import { FoundTest, InvalidTest, Mode, RuleTest, findTests, modeOf } from './rule-test-spec.js';
+import { prepareCode } from './rule-test-code.js';
+import { Verdict, invalidVerdict, judgeTest } from './rule-test-verdict.js';
 import { buildPlan } from './plan.js';
 import { runPlan } from './runner.js';
-import { JudgeResult, SupportedEngine } from './types.js';
+import { Issue, JudgeResult, SupportedEngine } from './types.js';
 
-// A review result for one fixture, plus the fixture's verdict. `fixture` is null for a rule without fixtures.
-export interface FixtureTestResult extends JudgeResult {
-  fixture: string | null;
-  expect: FixtureExpect | null;
-  result: FixtureVerdict;
-  reason?: string;
+// How the rule ran on a test: a review result without the rule's identity and its findings.
+export type TestRun = Omit<JudgeResult, 'judgeId' | 'displayName' | 'file' | 'issues'>;
+
+// One entry per test. `test` is null for a rule without tests; `run` is null when the rule did not run.
+export interface TestEntry {
+  rule: string;
+  test: string | null;
+  mode: Mode | null;
+  status: 'passed' | 'failed' | 'skipped';
+  reason: string | null;
+  findings: Issue[];
+  run: TestRun | null;
 }
 
-// One run per fixture, each in its own copy with only its rule; sorted by rule id, then fixture name.
-// Fixtures sit next to rule files, so JUDGE.md judges are not tested.
-export async function testRules(judges: Judge[], engine: SupportedEngine): Promise<FixtureTestResult[]> {
+const NO_TESTS = 'no tests';
+
+// One run per test, each in its own temporary copy with only its rule; sorted by rule id, then test name.
+// Tests live in rule directories, so JUDGE.md judges are not tested.
+export async function testRules(judges: Judge[], engine: SupportedEngine): Promise<TestEntry[]> {
   const runs = judges.filter((judge) => judge.format === 'rule').flatMap((judge) => {
-    const fixtures = findFixtures(judge);
-    if (fixtures.length === 0) return [Promise.resolve(withoutFixtures(judge))];
-    return fixtures.map((fixture) => testFixture(judge, fixture, engine));
+    const tests = findTests(judge);
+    if (tests.length === 0) return [Promise.resolve(withoutTests(judge))];
+    return tests.map((test) => runTest(judge, test, engine));
   });
-  return (await Promise.all(runs)).sort(byRuleThenFixture);
+  return (await Promise.all(runs)).sort(byRuleThenTest);
 }
 
-export function testExitCode(entries: FixtureTestResult[]): number {
-  return entries.some((entry) => entry.result === 'failed') ? 1 : 0;
+export function testExitCode(entries: TestEntry[]): number {
+  return entries.some((entry) => entry.status === 'failed') ? 1 : 0;
 }
 
-export function formatTestResults(entries: FixtureTestResult[]): string {
+export function formatTestResults(entries: TestEntry[]): string {
   const counts = (['passed', 'failed', 'skipped'] as const)
-    .map((result) => `${entries.filter((entry) => entry.result === result).length} ${result}`);
+    .map((status) => `${entries.filter((entry) => entry.status === status).length} ${status}`);
   return [...entries.map(formatEntry), '', counts.join(', ')].join('\n');
 }
 
-async function testFixture(judge: Judge, fixture: Fixture, engine: SupportedEngine): Promise<FixtureTestResult> {
-  if (!fixture.expect) {
-    const reason = `bad-name: "${fixture.name}" is not violation, violation-<name>, pass or pass-<name>; rename the directory`;
-    return entry(notRun(judge), fixture.name, null, { result: 'failed', reason });
-  }
-
-  // The copy keeps the fixture itself safe from the rule and from the blanking.
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'judge-fixture-')));
+// A broken test fails without a model call: skipping it would look the same as passing.
+async function runTest(judge: Judge, found: FoundTest, engine: SupportedEngine): Promise<TestEntry> {
+  let test: RuleTest;
   try {
-    fs.cpSync(fixture.dir, root, { recursive: true });
-    const files = walkDirectory(root);
-    const expected = blankExpectLinesIn(root, files, judge.id);
-    const context = { ...readContents(files, root), root };
-    const [run] = await runPlan(buildPlan([judge], context), engine);
-    return entry(run, fixture.name, fixture.expect, judgeFixture(fixture.expect, expected, run));
+    test = found.read();
+  } catch (error) {
+    return invalidEntry(judge, found.name, error);
+  }
+
+  // The copy keeps the test's files safe from the rule; the index of a history checkout sits next to it.
+  const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'judge-test-')));
+  try {
+    const root = path.join(workspace, 'repo');
+    fs.mkdirSync(root);
+    const [run] = await runPlan(buildPlan([judge], prepareCode(test.code, root)), engine);
+    return entry(judge.id, test.name, modeOf(test.code), judgeTest(test.expected, run), run);
+  } catch (error) {
+    return invalidEntry(judge, found.name, error);
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(workspace, { recursive: true, force: true });
   }
 }
 
-// Rewrites the copy in place and returns the lines the fixture expects findings on, relative to its root.
-function blankExpectLinesIn(root: string, files: string[], ruleId: string): ExpectedLine[] {
-  return files.flatMap((file) => {
-    const content = fs.readFileSync(file, 'utf-8');
-    if (!content.includes('rule-expect')) return [];
-    const blanked = blankExpectLines(path.relative(root, file), content, ruleId);
-    fs.writeFileSync(file, blanked.content);
-    return blanked.expected;
-  });
+function invalidEntry(judge: Judge, name: string, error: unknown): TestEntry {
+  if (!(error instanceof InvalidTest)) throw error;
+  return entry(judge.id, name, null, invalidVerdict(error.message));
 }
 
-function withoutFixtures(judge: Judge): FixtureTestResult {
-  const reason = `no fixtures: add a violation and a pass directory under ${judge.id}.fixtures/ next to the rule`;
-  return entry(notRun(judge), null, null, { result: 'skipped', reason });
+function withoutTests(judge: Judge): TestEntry {
+  return { rule: judge.id, test: null, mode: null, status: 'skipped', reason: NO_TESTS, findings: [], run: null };
 }
 
-function notRun(judge: Judge): JudgeResult {
-  return { judgeId: judge.id, displayName: displayName(judge), file: judge.filePath, status: 'skipped', issues: [], durationMs: 0 };
+function entry(rule: string, test: string, mode: Mode | null, verdict: Verdict, run?: JudgeResult): TestEntry {
+  return { rule, test, mode, ...verdict, findings: run?.issues ?? [], run: run ? runRecord(run) : null };
 }
 
-// The verdict comes first after the id, so it reads first in the JSON.
-function entry(run: JudgeResult, fixture: string | null, expect: FixtureExpect | null, verdict: Verdict): FixtureTestResult {
-  const { judgeId, ...ran } = run;
-  return { judgeId, fixture, expect, ...verdict, ...ran };
+function runRecord({ judgeId, displayName, file, issues, ...run }: JudgeResult): TestRun {
+  return run;
 }
 
-function byRuleThenFixture(a: FixtureTestResult, b: FixtureTestResult): number {
-  return compare(a.judgeId, b.judgeId) || compare(a.fixture ?? '', b.fixture ?? '');
+function byRuleThenTest(a: TestEntry, b: TestEntry): number {
+  return compare(a.rule, b.rule) || compare(a.test ?? '', b.test ?? '');
 }
 
 function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function formatEntry(entry: FixtureTestResult): string {
-  const name = entry.fixture === null ? entry.judgeId : `${entry.judgeId}/${entry.fixture}`;
-  if (entry.result === 'passed') return colors.green(`✔ ${name}`);
-  if (entry.result === 'skipped') return colors.dim(`○ ${name}: skipped (${entry.reason})`);
+function formatEntry(entry: TestEntry): string {
+  if (entry.test === null) return colors.dim(`○ ${entry.rule}: skipped (${entry.reason})`);
+  const name = `${entry.rule}/${entry.test}${entry.mode ? ` (${entry.mode})` : ''}`;
+  if (entry.status === 'passed') return colors.green(`✔ ${name}`);
   return colors.red(`✘ ${name}: ${entry.reason}`);
 }

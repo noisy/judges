@@ -161,33 +161,132 @@ judge config --check naming-conventions
 \`\`\`
 Only validates the judge whose directory matches exactly \`naming-conventions\`.
 
-## Testing rules with fixtures
+## Testing rules
 
-A rule can ship with fixtures: tiny repositories next to the rule file, in `<dir>/<id>.fixtures/`. A directory named `violation` or `violation-<name>` breaks the rule; one named `pass` or `pass-<name>` follows it. Files directly in `<id>.fixtures/`, like a README, are ignored.
+A rule with tests is a directory, `<dir>/<id>/RULE.md`, and its tests live in `<dir>/<id>/tests/`. Each test is some code and the result the rule must give on it. `judge test` runs the rule on each test and says which ones pass. Run it when you write a rule, when you change its text, and when the model or the engine changes. A rule in a single file, `<id>.md`, has no tests.
 
 ```
 rules/
-  error-messages-say-what-to-do.md
-  error-messages-say-what-to-do.fixtures/
-    violation/src/config.py
-    violation-missing-file/src/settings.py
-    pass/src/config.py
+  comments-explain-why.md                 a rule in one file: no tests
+  no-print-calls/
+    RULE.md                               the rule
+    tests/
+      prints-total/                       review: repo/ and a patch
+        test.yaml
+        change.patch
+        repo/src/app.py
+      old-prints/                         audit: repo/ only
+        test.yaml
+        repo/src/app.py
+      mr-41/test.yaml                     review of real history: base and head
+      audit-v2/test.yaml                  audit of real history: commit
+      prints-in-loop.md                   a single-file test
 ```
 
-A violation fixture may mark the lines it expects findings on, with the comment syntax of [markers](markers.md). Like a line marker, it covers the next line that is neither blank nor another marker:
+Each directory with a `test.yaml` and each `.md` file in `tests/` is one test, named after the directory or the file without `.md`. Other files and hidden entries are ignored.
 
+### Where the code comes from
+
+A directory test takes its code from exactly one of these:
+
+| The test has | Mode | What the rule reviews |
+| :--- | :--- | :--- |
+| `repo/` and `change.patch` | review | the change in the patch, applied to a copy of `repo/` with `git apply` |
+| `repo/` only | audit | every file in `repo/` |
+| `base` and `head` in `test.yaml` | review | `base...head` of the repository `judge test` runs in, checked out at `head` |
+| `commit` in `test.yaml` | audit | every file of that repository at `commit` |
+
+- `change.patch` is the output of `git diff`.
+- `base`, `head` and `commit` are any commit-ish git resolves: a commit id, a branch, a tag. Quote a commit id made only of digits. The commits must be in the local clone; a shallow CI clone may not have them.
+- A history test reads the commit into a temporary directory through a temporary index. It never touches the working tree, the index or the checked-out branch, and uncommitted edits are not part of the test. The rule text is the one on disk now, so the test checks today's rule against old code.
+
+A single-file test holds everything in one Markdown file:
+
+````markdown
+---
+expect: findings
+must:
+  - file: src/report.py
+    lines: 3
+---
+A loop that prints each line. This note is for people; the model never sees it.
+
+## src/report.py
 ```python
-def load_port(value):
-    if not value.isdigit():
-        # rule-expect: error-messages-say-what-to-do
-        raise ValueError("invalid port")
+def write_report(lines):
+    pass
 ```
+
+## change
+```diff
+diff --git a/src/report.py b/src/report.py
+--- a/src/report.py
++++ b/src/report.py
+@@ -1,2 +1,3 @@
+ def write_report(lines):
+-    pass
++    for line in lines:
++        print(line)
+```
+````
+
+- The frontmatter is the expected result.
+- `## <path>` and the code block after it is one file of the repository. `## change` and a `diff` block is the change: with it the test is a review, without it an audit.
+- Any other text is a note for people. It never reaches the model.
+
+### The expected result
+
+The whole `test.yaml`, or the frontmatter of a single-file test:
+
+| Field | Value | Meaning |
+| :--- | :--- | :--- |
+| `expect` | `findings` or `clean` | required: must the rule report something? |
+| `must` | list of `{ file, lines }` | each place needs at least one finding |
+| `must_not` | list of `{ file, lines }` | no finding may be at these places |
+| `count` | a number, or `{ min, max }` | how many findings |
+
+`lines` is a line number or `[first, last]`; leave it out to mean the whole file. A finding is at a place when it is in that file and its lines overlap. Findings that no field mentions are allowed; a test that wants none elsewhere says so with `count`.
+
+### How a test runs, and its verdict
+
+Each test is its own run of its rule alone, in a temporary copy, with the rule's own scope, context, model, mode, budget and markers. Paths are relative to the root of the test's repository. `## Examples` in `RULE.md` reaches the model as in a review.
+
+A test passes only when the rule ran with status `ok` and every field of the expected result holds. A failed test gets a reason that starts with the code of the first check that fails:
+
+| Code | When |
+| :--- | :--- |
+| `invalid` | the test itself is broken; the rule did not run |
+| `did-not-run` | the rule ended with status `error`, `timeout` or `skipped` (for example no file in its scope) |
+| `missed` | `expect: findings`, but there is no finding |
+| `false-positive` | `expect: clean`, but there is a finding |
+| `must` | a place in `must` has no finding |
+| `must-not` | a finding is at a place in `must_not` |
+| `count` | the number of findings is outside `count` |
+
+A test is invalid, and fails without a model call, when its YAML does not parse, `expect` is missing or wrong, a field is unknown (a typo like `must_nt`), `expect: clean` comes with `must` or `count`, a place has no `file` or bad `lines`, a directory test has no code source or more than one, only one of `base` and `head` is given, `change.patch` has no `repo/`, a directory in `tests/` has no `test.yaml`, a single-file test has `base`, `head` or `commit`, `## change` has no `diff` block, the patch does not apply, or a commit-ish does not resolve. A broken test is never skipped, because a skipped test looks the same as a passing one. The tests of an invalid rule fail with `did-not-run`.
 
 ```bash
 judge test --rules rules
-judge test --rules rules --only error-messages-say-what-to-do --json
+judge test --rules rules --only no-print-calls --json
 ```
 
-Each fixture is one run of its rule alone, reviewing all files of a temporary copy of the fixture as the repository root: paths and scope are relative to the fixture, and the rule's model, mode and budget apply. The `rule-expect` lines are blanked in the copy, so the rule never sees them and line numbers do not move. A fixture passes only when the rule ran with status `ok` and a violation fixture got a finding (on every marked line and on no other line, when it marks lines), or a pass fixture got none. A failure starts with a reason code: `did-not-run`, `missed`, `wrong-line`, `false-positive` or `bad-name`. A rule without fixtures is skipped. `judge test` exits `0` when every fixture passed, `1` when one failed, `2` on a usage error such as an unknown `--only` id. `--json` prints one review result per fixture, with `fixture`, `expect`, `result` (`passed`, `failed` or `skipped`) and `reason`.
+Without `--json`, one line per test: `✔ <rule>/<test> (review)`, `✘ <rule>/<test> (audit): <reason>` or `○ <rule>: skipped (no tests)`, then a count of each status. A rule without tests is skipped and does not fail the run. `judge test` exits `0` when no test failed, `1` when one failed, and `2` on a usage error, such as an unknown `--only` id or a missing rules directory. `--rules`, `--only` and `--engine` work as in a review.
 
-A review leaves out the files under `<id>.fixtures/` of every loaded rule, so a rule with a wide scope never flags its own violation fixture.
+`--json` prints an array with one entry per test, sorted by rule id and then test name:
+
+```json
+[
+  { "rule": "comments-explain-why", "test": null, "mode": null, "status": "skipped", "reason": "no tests", "findings": [], "run": null },
+  {
+    "rule": "no-print-calls", "test": "prints-in-loop", "mode": "review", "status": "failed",
+    "reason": "missed: expected findings, got none", "findings": [],
+    "run": { "status": "ok", "durationMs": 812, "costUsd": 0.002, "turns": 1, "inline": ["src/report.py"] }
+  }
+]
+```
+
+`status` is `passed`, `failed` or `skipped`, `reason` is null for a passed test, and `findings` have paths relative to the test's repository. `run` holds the fields of a review result (`status`, `durationMs`, `costUsd`, `turns`, `inline`, `examined`, `error`, `skipReason`, ...); it is null when the rule was never started: a rule without tests, or an invalid test.
+
+### A review never reviews tests
+
+A test holds code that breaks its rule on purpose. So every review leaves out the files under `<dir>/*/tests/` of every `--rules` directory, in every input mode and whatever the rule's scope says. A rule with a wide scope does not flag its own test when someone commits it.

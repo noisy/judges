@@ -13,7 +13,7 @@ import { groupByRule, formatInventory } from './inventory.js';
 import { formatIssuesList, formatJudgeFailure } from './format.js';
 import { shouldBlock } from './gate.js';
 import { pairReports, reportsUsageError, writeReports } from './reports/index.js';
-import { withoutRuleFixtures } from './fixtures.js';
+import { withoutRuleTests } from './rule-test-spec.js';
 import { testRules, testExitCode, formatTestResults } from './rule-test.js';
 import colors from 'picocolors';
 import { createRequire } from 'module';
@@ -95,7 +95,7 @@ async function main() {
 
   let inputContext: EvaluationContext;
   try {
-    inputContext = withoutRuleFixtures(resolveInputContext(config), loaded);
+    inputContext = withoutRuleTests(resolveInputContext(config), config.ruleDirs);
   } catch (error: any) {
     // A usage error is reported even with --json: there is no report to carry it.
     if (error instanceof UsageError) {
@@ -142,20 +142,12 @@ function loadJudgesOrExit(config: AppConfig): { loaded: Judge[]; selected: Judge
   }
 }
 
-// Runs each valid rule on its fixtures; the exit code says whether every fixture passed.
+// Runs each rule on its tests; the exit code says whether every test passed.
+// An invalid rule is not left out: each of its tests fails with did-not-run, as in a review it reports an error.
 async function runRuleTests(judges: Judge[], config: AppConfig): Promise<void> {
-  const validJudges = judges.filter(j => {
-    if (!j.isValid) {
-      if (!config.json) {
-        console.warn(colors.yellow(`⚠ skipping ${j.filePath} — invalid:\n  └─ ${j.validationErrors.join('\n  └─ ')}`));
-      }
-      return false;
-    }
-    return true;
-  });
-  const entries = await testRules(validJudges, config.engine);
+  const entries = await testRules(judges, config.engine);
   if (entries.length === 0) {
-    console.error(colors.red('❌ Error: no valid rule files to test; pass a rules directory with --rules <dir>'));
+    console.error(colors.red('❌ Error: no rules to test; pass a rules directory with --rules <dir>'));
     process.exit(USAGE_ERROR_EXIT_CODE);
   }
   console.log(config.json ? JSON.stringify(entries, null, 2) : formatTestResults(entries));
@@ -256,7 +248,7 @@ function printHelp(): void {
   console.log(`
 Usage: judge [options] [paths...]
        judge markers [paths...] [--json]   List rule-ignore / rule-todo markers, grouped by rule
-       judge test [--rules <dir>] [--only <id>] [--json]   Run each rule on its fixtures (<dir>/<id>.fixtures/)
+       judge test [--rules <dir>] [--only <id>] [--json]   Run each rule on its tests (<dir>/<id>/tests/)
 
 Options:
   --file, -f   Evaluate a specific file or files instead of git diff
@@ -264,7 +256,7 @@ Options:
   --short, -s  Only show the summarization line per judge (0 issues detailed)
   --full       Show all issues found by judges
   --top <X>    Show the top X issues per judge (Default: 3)
-  --rules <dir> Load flat rule files (<dir>/<id>.md); repeatable, overrides judges with the same id
+  --rules <dir> Load rules (<dir>/<id>.md and <dir>/<id>/RULE.md); repeatable, overrides judges with the same id
   --only <id>  Run only the named judge or rule; repeatable
   --stage <name> Run only the rules of a gate: commit, push or ci (ci runs all; default: all)
   --root <dir> Repository root agent judges explore (default: the git root); file input only

@@ -6,6 +6,13 @@
 - A rule can be a directory: `<rules dir>/<id>/RULE.md`, with the directory name as its id. A directory without `RULE.md` is reported as an invalid rule. A file and a directory with the same id in one rules directory is a usage error (exit 2) that names both.
 - `check` and `command` are no longer rule fields. A rule that sets either is invalid, and the other rules still run.
 
+### Rule tests
+- Rule tests replace the fixtures of 0.2.0: `<id>.fixtures/` and `rule-expect` lines are gone. A rule directory keeps its tests in `tests/`. A test is a directory with `test.yaml`, or a single Markdown file with the expected result in its frontmatter and the code in `## <path>` blocks.
+- The code of a test is `repo/` with an optional `change.patch` (a review of the patch, or an audit of `repo/`), `base` and `head` (a review of real history), or `commit` (an audit of one commit). History tests use a temporary checkout and never touch the working tree or the index.
+- The expected result is `expect: findings | clean`, with optional `must`, `must_not` and `count`. A failed test gets a reason code: `invalid`, `did-not-run`, `missed`, `false-positive`, `must`, `must-not` or `count`. A broken test fails as `invalid` without a model call.
+- `judge test --json` prints one entry per test: `rule`, `test`, `mode`, `status` (`passed`, `failed` or `skipped`), `reason`, `findings` and `run`.
+- A review leaves out `<rules dir>/*/tests/**`, so a rule never flags its own tests.
+
 ## 0.2.0 (2026-10-30)
 
 The first release with rules. A rule is one Markdown file: settings in the frontmatter, the rule text in the body.
