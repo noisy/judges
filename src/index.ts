@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import { parseArgs, inputUsageError, AppConfig, UsageError, USAGE_ERROR_EXIT_CODE } from './config.js';
+import { parseArgs, inputUsageError, stageUsageError, AppConfig, UsageError, USAGE_ERROR_EXIT_CODE } from './config.js';
 import { extractDiff } from './diff.js';
 import { resolvePaths, readContents, repoRoot } from './files.js';
 import { discoverJudges, selectJudges, Judge } from './judges.js';
 import { ProgressRenderer, issueSummaryLine } from './ui.js';
-import { EvaluationContext, JudgeResult } from './types.js';
+import { EvaluationContext, JudgeResult, Stage } from './types.js';
 import { runPlan } from './runner.js';
 import { buildPlan } from './plan.js';
 import { auditMarkers } from './marker-audit.js';
@@ -34,7 +34,7 @@ async function main() {
     return;
   }
 
-  const usageError = inputUsageError(config);
+  const usageError = inputUsageError(config) ?? stageUsageError(config);
   if (usageError) {
     console.error(colors.red(`❌ Error: ${usageError}`));
     process.exit(USAGE_ERROR_EXIT_CODE);
@@ -189,7 +189,7 @@ async function orchestrateEvaluation(
     renderer.start();
   }
 
-  const plan = buildPlan(judges, inputContext);
+  const plan = buildPlan(judges, inputContext, config.stage as Stage | undefined); // checked by stageUsageError
   const judgeResults = await runPlan(plan, config.engine, (event) => renderer.update(event));
   const markerAudit = auditMarkers(inputContext, knownRuleIds);
   const results = markerAudit.issues.length > 0 ? [...judgeResults, markerAudit] : judgeResults;
@@ -231,6 +231,7 @@ Options:
   --top <X>    Show the top X issues per judge (Default: 3)
   --rules <dir> Load flat rule files (<dir>/<id>.md); repeatable, overrides judges with the same id
   --only <id>  Run only the named judge or rule; repeatable
+  --stage <name> Run only the rules of a gate: commit, push or ci (ci runs all; default: all)
   --root <dir> Repository root agent judges explore (default: the git root); file input only
   --base <ref> Review the branch's commits since it left <ref> (git diff <ref>...HEAD)
   --help, -h   Show this help message

@@ -1,7 +1,7 @@
 import { Judge } from './judges.js';
 import { scopeContext } from './scope.js';
 import { Marker, accountedFor, findMarkersInFiles } from './markers.js';
-import { EvaluationContext } from './types.js';
+import { EvaluationContext, Stage } from './types.js';
 
 export type PlanItem =
   | { judge: Judge; context: EvaluationContext; markers: Marker[] }
@@ -11,13 +11,27 @@ export type PlanItem =
 export const SKIP_NO_FILES_IN_SCOPE = 'no files in scope';
 export const SKIP_DETERMINISTIC = 'deterministic check (not executed yet)';
 
-export function buildPlan(judges: Judge[], context: EvaluationContext): PlanItem[] {
-  return judges.map((judge) => planJudge(judge, context));
+// `ci` runs every rule; `commit` and `push` run only their own, so push does not repeat commit.
+function runsAtStage(judge: Judge, stage: Stage): boolean {
+  return stage === 'ci' || judge.stage === stage;
 }
 
-function planJudge(judge: Judge, context: EvaluationContext): PlanItem {
+export function skipOtherStage(judge: Judge, stage: Stage): string {
+  return `stage ${judge.stage} (not run at --stage ${stage})`;
+}
+
+export function buildPlan(judges: Judge[], context: EvaluationContext, stage?: Stage): PlanItem[] {
+  return judges.map((judge) => planJudge(judge, context, stage));
+}
+
+function planJudge(judge: Judge, context: EvaluationContext, stage?: Stage): PlanItem {
+  // An invalid rule has no stage of its own to filter on, so it is reported at every stage.
   if (!judge.isValid) {
     return { judge, invalid: `invalid rule: ${judge.validationErrors.join('; ')}` };
+  }
+  // Without a stage every rule runs, as before stages existed.
+  if (stage !== undefined && !runsAtStage(judge, stage)) {
+    return { judge, skip: skipOtherStage(judge, stage) };
   }
   if (judge.check === 'deterministic') {
     return { judge, skip: SKIP_DETERMINISTIC };

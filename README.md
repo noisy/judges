@@ -51,6 +51,7 @@ judge -f src/index.ts src/utils.ts
 - `--top <X>`: Show the top X issues per judge (Default: 3).
 - `--engine <name>`: Choose the AI engine to execute. Supported: `claude` (default) and `codex`.
 - `--json`, `-j`: Output results in exact JSON format (for agents).
+- `--stage <name>`: Run only the rules of one gate: `commit` (rules without `stage` too), `push`, or `ci` (every rule). Rules of another stage are reported as skipped. Without it, every rule runs.
 - `--root <dir>`: Repository root that agent judges explore and file paths are shown relative to (default: the git root). File input only; with a diff mode it is an error.
 - `--help`, `-h`: Show the help message.
 

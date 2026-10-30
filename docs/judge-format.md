@@ -55,6 +55,7 @@ A rule is a flat Markdown file `<dir>/<id>.md`, loaded from every directory pass
 | `description` | `string` | No | `''` | Short summary. |
 | `version` | `string` | No | `''` | Semver, validated when present. |
 | `scope` | `string[]` | No | `["**/*"]` | Path globs the rule applies to. |
+| `stage` | `'commit' \| 'push' \| 'ci'` | No | `'commit'` | The gate the rule runs at. `--stage commit` and `--stage push` run only their own rules and report the others as skipped; `--stage ci`, or no `--stage`, runs every rule. Never derived from the model or budget. |
 | `severity` | `'low' \| 'medium' \| 'high'` | No | `'medium'` | Severity of a violation. |
 | `check` | `'judge' \| 'deterministic'` | No | `'judge'` | `deterministic` rules are never sent to a model. |
 | `command` | `string` | No | - | Script or test for a `deterministic` rule. Only allowed with `check: deterministic`. |
