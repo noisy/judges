@@ -116,7 +116,7 @@ export function markersSection(markers: Marker[]): string {
   return `Markers: the team marked some places as known exceptions (rule-exception) or known debt (rule-debt) for this rule. Each marker is listed at its place, <file>:<line> of the marker comment, with its reason:
 ${entries.join('\n')}
 Read each marker and decide what it covers: a line, a block, a function or a whole file, as its reason says. It may be about code above it, such as the function its docstring belongs to, or several lines below it.
-Do not report a violation a marker accounts for as a finding. Return it in the same array, with one more field: "covered_by": "<the marker's place, as listed above>".
+List every violation, also the ones a marker accounts for. Give each violation a marker accounts for one more field: "covered_by": "<the marker's place, as listed above>". It is then left out of the report and shown with the marker that covered it.
 Report every other violation as usual, without "covered_by", even right next to a marker: a marker covers only what its reason is about.
 
 `;
