@@ -97,7 +97,7 @@ function coversLine(marker: Marker, line: number): boolean {
   return marker.scope !== 'file' && line >= marker.markerLine && line <= marker.scope.line;
 }
 
-function samePath(a: string, b: string): boolean {
+export function samePath(a: string, b: string): boolean {
   return normalizePath(a) === normalizePath(b);
 }
 
