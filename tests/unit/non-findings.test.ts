@@ -8,7 +8,8 @@ const SAYS_NO_VIOLATION = [
   'The ValueError for a non-positive refund amount says what was wrong, includes the bad value (got {amount_cents}), and tells the reader what to enter (amount in cents, e.g. 1250). This message complies and is not a finding; no change needed. (Kept as a reference point for the rule; no issue reported here.)',
   "The comment explains why the window is 119 rather than the network's 120, which is useful, but it is attached to the constant line directly above it. No issue here per the rule, since it gives a reason the code cannot show. Disregard if already reviewed; this entry is retained only because the line-7 comment is a reason-bearing comment and should not be flagged.",
   "The comment explains why the window is 119 days rather than 120, which is useful, but it is attached to the constant the code already names. No issue with the rule here; this entry is intentionally omitted from findings because the comment conveys a reason (safety margin against the network's 120-day limit), which the code cannot show.",
-  "The comment explains the reason for the 119-day value (the network's 120-day limit minus a safety day), so it is acceptable. However, it sits above the constant rather than being inline, which is fine. No restatement issue here; keeping this as a note only if you want to tighten wording. Consider no change."
+  "The comment explains the reason for the 119-day value (the network's 120-day limit minus a safety day), so it is acceptable. However, it sits above the constant rather than being inline, which is fine. No restatement issue here; keeping this as a note only if you want to tighten wording. Consider no change.",
+  'The comment `# Cents, not euros: the card API counts in the smallest unit.` does explain a unit, so it is a valid comment. No issue here; however, note that the function `refundable_cents` is below it and the comment correctly explains the unit meaning. (Reporting only violations: this entry should be disregarded.)'
 ];
 
 const REAL_FINDINGS = [
@@ -17,6 +18,7 @@ const REAL_FINDINGS = [
   'This message does not say what to do.',
   'The error message is fine in tone but does not say what value was expected.',
   'No issue with the name itself, but the comment restates the code.',
+  'The name is fine, but it should read as a question.',
   'The function has no test.'
 ];
 

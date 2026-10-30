@@ -13,7 +13,7 @@ const SAYS_NO_VIOLATION = [
 // Any of these means the entry still asks for a change, e.g. a real finding that also clears a nearby line.
 const STILL_COMPLAINS = [
   /\b(?:replace|rename|remove|delete|add|move|split|extract|use|return|raise|throw|say|tell)\b/i,
-  /\bshould\b(?! not be (?:flagged|reported))/i,
+  /\bshould\b(?!(?: not)? be (?:flagged|reported|disregarded|ignored))/i,
   /\b(?:must|instead|missing|lacks?|vague|unclear|restates?|violates|breaks)\b/i,
   /\b(?:does|do|did)(?: not|n't)\b/i
 ];
