@@ -203,6 +203,8 @@ describe('invalid tests', () => {
     ['a directory without code', 'no-code/test.yaml', 'expect: findings\n', /no code/],
     ['a patch without repo/', 'patch-only/change.patch', PRINT_PATCH, /change\.patch needs repo\//],
     ['a single-file test with a commit', 'history.md', '---\ncommit: main\nexpect: clean\n---\n', /takes no `commit`/],
+    ['a frontmatter that is no mapping', 'scalar.md', '---\nfindings\n---\n', /the frontmatter must be a mapping/],
+    ['a test.yaml that is a list', 'list/test.yaml', '- expect: findings\n', /test\.yaml must be a mapping/],
     ['## change without a diff block', 'no-diff.md', '---\nexpect: clean\n---\n## change\n```\nx\n```\n', /`## change` has no ```diff block/],
     ['a path outside the repository', 'escape.md', '---\nexpect: clean\n---\n## ../outside.py\n```\nx\n```\n', /not a path inside/],
   ])('fails %s as invalid', async (_, file, content, reason) => {
@@ -305,6 +307,12 @@ describe('which tests run', () => {
       { rule: 'comments-explain-why', test: null, mode: null, status: 'skipped', reason: 'no tests', findings: [], run: null },
       { rule: 'empty-dir', test: null, mode: null, status: 'skipped', reason: 'no tests', findings: [], run: null },
     ]);
+  });
+
+  it('finds no tests in a file named tests', async () => {
+    writeFile('no-print/tests', 'not a directory');
+
+    expect(await testRules([rule('no-print')], 'claude')).toEqual([expect.objectContaining({ status: 'skipped', reason: 'no tests' })]);
   });
 
   it('ignores hidden entries and files other than .md in tests/, and sorts by rule, then test', async () => {

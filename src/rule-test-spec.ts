@@ -126,7 +126,7 @@ function cleanMeansNoFinding(fields: { expect: string; must: Place[]; count?: Co
 export function findTests(judge: Judge): FoundTest[] {
   const directory = ruleDirectory(judge);
   const testsDir = directory === undefined ? undefined : path.join(directory, TESTS_DIR);
-  if (testsDir === undefined || !fs.existsSync(testsDir)) return [];
+  if (testsDir === undefined || !isDirectory(testsDir)) return [];
 
   return fs.readdirSync(testsDir, { withFileTypes: true })
     .filter((entry) => !entry.name.startsWith('.'))
@@ -191,7 +191,7 @@ function readDirectoryTest(name: string, dir: string): RuleTest {
 function directoryCode(dir: string, fields: DirectoryTestFields): Code {
   const repo = path.join(dir, REPO_DIR);
   const patchFile = path.join(dir, PATCH_FILE);
-  const hasRepo = fs.existsSync(repo) && fs.statSync(repo).isDirectory();
+  const hasRepo = isDirectory(repo);
   const hasHistory = fields.base !== undefined || fields.head !== undefined;
   const sources = [
     hasRepo ? `${REPO_DIR}/` : '',
@@ -220,7 +220,7 @@ function readSingleFileTest(name: string, file: string): RuleTest {
   } catch (error: any) {
     throw new InvalidTest(`the frontmatter is not valid YAML: ${yamlProblem(error)}`);
   }
-  const history = HISTORY_FIELDS.filter((field) => field in parsed.data);
+  const history = isMapping(parsed.data) ? HISTORY_FIELDS.filter((field) => field in parsed.data) : [];
   if (history.length > 0) {
     throw new InvalidTest(`a single-file test holds its code in the file, so it takes no ${history.map((field) => `\`${field}\``).join(', ')}`);
   }
@@ -308,6 +308,7 @@ function parseYaml(text: string): unknown {
 
 function parseFields<T extends z.ZodType>(schema: T, data: unknown, source: string): z.output<T> {
   if (data === undefined || data === null) throw new InvalidTest(`${source} is empty; it needs at least \`expect\``);
+  if (!isMapping(data)) throw new InvalidTest(`${source} must be a mapping of fields, like \`expect: findings\``);
   const parsed = schema.safeParse(data);
   if (parsed.success) return parsed.data;
   throw new InvalidTest(parsed.error.issues.map(describeIssue).join('; '));
@@ -329,6 +330,14 @@ function located(at: PropertyKey[], message: string): string {
 
 function expectedOf(fields: Expected): Expected {
   return { expect: fields.expect, must: fields.must, must_not: fields.must_not, count: fields.count };
+}
+
+function isMapping(data: unknown): data is Record<string, unknown> {
+  return typeof data === 'object' && data !== null && !Array.isArray(data);
+}
+
+function isDirectory(target: string): boolean {
+  return fs.existsSync(target) && fs.statSync(target).isDirectory();
 }
 
 // js-yaml puts a snippet of the source under its message; the reason and the line are enough on one line.
