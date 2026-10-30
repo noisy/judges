@@ -102,7 +102,7 @@ function isInIgnoredDir(relativePath: string): boolean {
   return relativePath.split(path.sep).slice(0, -1).some((segment) => IGNORED_DIRS.has(segment));
 }
 
-function walkDirectory(dir: string): string[] {
+export function walkDirectory(dir: string): string[] {
   if (IGNORED_DIRS.has(path.basename(dir))) return [];
   return fs.readdirSync(dir).flatMap((child) => {
     const fullPath = path.join(dir, child);

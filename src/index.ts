@@ -12,6 +12,7 @@ import { findMarkersInFiles } from './markers.js';
 import { groupByRule, formatInventory } from './inventory.js';
 import { formatIssuesList, formatJudgeFailure } from './format.js';
 import { shouldBlock } from './gate.js';
+import { testRules, testExitCode, formatTestResults } from './rule-test.js';
 import colors from 'picocolors';
 import { createRequire } from 'module';
 
@@ -19,6 +20,9 @@ import path from 'path';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
+
+// `judge test` keeps exit code 1 for a failing fixture, so a usage error gets its own.
+const TEST_USAGE_EXIT_CODE = 2;
 
 async function main() {
   const argsArray = process.argv.slice(2);
@@ -89,6 +93,11 @@ async function main() {
     return true;
   });
 
+  if (config.command === 'test') {
+    await runRuleTests(validJudges, config);
+    return;
+  }
+
   if (validJudges.length === 0) {
     console.log("No valid judges found in ~/.judge/judges/, ./.judge/judges/ or --rules directories");
     return;
@@ -130,8 +139,20 @@ function loadJudgesOrExit(config: AppConfig): { loaded: Judge[]; selected: Judge
     return { loaded, selected };
   } catch (error: any) {
     console.error(colors.red(`❌ Error: ${error.message}`));
-    process.exit(1);
+    process.exit(config.command === 'test' ? TEST_USAGE_EXIT_CODE : 1);
   }
+}
+
+// Runs each rule on its fixtures; the exit code says whether every fixture passed.
+async function runRuleTests(judges: Judge[], config: AppConfig): Promise<void> {
+  if (judges.length === 0) {
+    console.error(colors.red('❌ Error: no valid rules to test; pass a rules directory with --rules <dir>'));
+    process.exit(TEST_USAGE_EXIT_CODE);
+  }
+  const entries = await testRules(judges, config.engine);
+  console.log(config.json ? JSON.stringify(entries, null, 2) : formatTestResults(entries));
+  // Not process.exit: it can cut off a long report still being written to a pipe.
+  process.exitCode = testExitCode(entries);
 }
 
 // Lists markers in the given paths, or in the whole repository by default.
@@ -225,6 +246,7 @@ function printHelp(): void {
   console.log(`
 Usage: judge [options] [paths...]
        judge markers [paths...] [--json]   List rule-ignore / rule-todo markers, grouped by rule
+       judge test [--rules <dir>] [--only <id>] [--json]   Run each rule on its fixtures (<dir>/<id>.fixtures/)
 
 Options:
   --file, -f   Evaluate a specific file or files instead of git diff
