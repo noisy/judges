@@ -125,7 +125,7 @@ describe('validateRule', () => {
     expect(result.valid).toBe(true);
     expect(result.data).toMatchObject({
       name: 'booleans', description: '', version: '', scope: ['**/*'], severity: 'medium',
-      check: 'judge', tools: [], allow_read: [], timeout_seconds: 30, mode: 'one-shot', context: 'file',
+      tools: [], allow_read: [], timeout_seconds: 30, mode: 'one-shot', context: 'file',
     });
   });
 
@@ -164,11 +164,12 @@ describe('validateRule', () => {
     expect(result.data).toMatchObject({ timeout_seconds: 10, max_budget_usd: 0.1 });
   });
 
-  it('should reject a command on a judge rule', () => {
-    const result = validateRule({ id: 'r', command: 'npm test' }, 'r');
-    expect(result.valid).toBe(false);
-    expect(result.errors[0]).toContain('only allowed with `check: deterministic`');
-  });
+  it.each([['check', 'judge'], ['check', 'deterministic'], ['command', 'npm test']])(
+    'should reject `%s`, which is no rule field, whatever its value', (field, value) => {
+      const result = validateRule({ id: 'r', [field]: value }, 'r');
+      expect(result.valid).toBe(false);
+      expect(result.errors).toEqual([expect.stringMatching(new RegExp(`^error: \`${field}\` is not a rule field`))]);
+    });
 
   it('should make a rule without stage a commit rule, and keep a given stage', () => {
     expect(validateRule({ id: 'r' }, 'r').data.stage).toBe('commit');

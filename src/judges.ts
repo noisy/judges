@@ -2,12 +2,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import os from 'os';
 import matter from 'gray-matter';
-import { validateJudge, validateRule, defaultSettings, ValidationResult, Context } from './validator.js';
+import { validateJudge, validateRule, defaultSettings, ValidationResult, Context, IdSource } from './validator.js';
 import { UsageError } from './config.js';
 import { Stage } from './types.js';
 
 export interface Judge {
-  id: string; // Directory name for JUDGE.md, file name for rules
+  id: string; // Directory name for JUDGE.md and RULE.md, file name for other rules
   name: string;
   description: string;
   version: string;
@@ -18,12 +18,10 @@ export interface Judge {
   scope: string[];
   stage: Stage;
   severity: 'low' | 'medium' | 'high';
-  check: 'judge' | 'deterministic';
   model?: string;
   tools: string[];
   allow_read: string[]; // directories outside the repo an agent judge may read
   max_turns?: number;
-  command?: string;
   format: 'judge-md' | 'rule';
   instructions: string;
   filePath: string;
@@ -34,10 +32,18 @@ export interface Judge {
 
 export interface JudgeSources {
   legacyDirs: string[]; // <dir>/<id>/JUDGE.md
-  ruleDirs: string[];   // <dir>/<id>.md
+  ruleDirs: string[];   // <dir>/<id>.md and <dir>/<id>/RULE.md
+}
+
+// Where a rule is in a rules directory, before it is read; `named` is what its id must match.
+interface RuleSource {
+  id: string;
+  filePath: string;
+  named: IdSource;
 }
 
 const RULE_EXTENSION = '.md';
+export const RULE_FILE = 'RULE.md';
 
 export function displayName(judge: Judge): string {
   return judge.name || judge.id;
@@ -79,7 +85,7 @@ function findJudgeMdsInDir(baseDir: string): Judge[] {
     .filter(entry => entry.isDirectory())
     .map(entry => ({ id: entry.name, filePath: path.join(baseDir, entry.name, 'JUDGE.md') }))
     .filter(({ filePath }) => fs.existsSync(filePath))
-    .flatMap(({ id, filePath }) => loadJudgeFile(id, filePath, 'judge-md', validateJudge));
+    .map(({ id, filePath }) => loadJudgeFile(id, filePath, 'judge-md', validateJudge));
 }
 
 function findRulesInDir(baseDir: string): Judge[] {
@@ -87,10 +93,56 @@ function findRulesInDir(baseDir: string): Judge[] {
     throw new UsageError(`Rules directory not found: ${baseDir}`);
   }
 
-  return fs.readdirSync(baseDir, { withFileTypes: true })
-    .filter(entry => entry.isFile() && entry.name.endsWith(RULE_EXTENSION))
-    .map(entry => ({ id: path.basename(entry.name, RULE_EXTENSION), filePath: path.join(baseDir, entry.name) }))
-    .flatMap(({ id, filePath }) => loadJudgeFile(id, filePath, 'rule', data => validateRule(data, id)));
+  const sources = findRuleSources(baseDir);
+  rejectSameId(sources);
+  return sources.map(source => fs.existsSync(source.filePath)
+    ? loadJudgeFile(source.id, source.filePath, 'rule', data => validateRule(data, source.id, source.named))
+    : withoutRuleFile(source));
+}
+
+// A rule is `<id>.md` or `<id>/RULE.md`, nothing deeper, so the .md files of a rule's tests are never rules.
+function findRuleSources(baseDir: string): RuleSource[] {
+  return fs.readdirSync(baseDir, { withFileTypes: true }).flatMap((entry): RuleSource[] => {
+    if (entry.isFile() && entry.name.endsWith(RULE_EXTENSION)) {
+      return [{ id: path.basename(entry.name, RULE_EXTENSION), filePath: path.join(baseDir, entry.name), named: 'file name' }];
+    }
+    if (entry.isDirectory() && !entry.name.startsWith('.')) {
+      return [{ id: entry.name, filePath: path.join(baseDir, entry.name, RULE_FILE), named: 'directory name' }];
+    }
+    return [];
+  });
+}
+
+// Inside one directory no order can decide which of the two the team means, and running one would hide the other.
+function rejectSameId(sources: RuleSource[]): void {
+  const files = new Map(sources.filter(source => source.named === 'file name').map(source => [source.id, source]));
+  for (const directory of sources.filter(source => source.named === 'directory name')) {
+    const file = files.get(directory.id);
+    if (file) {
+      const directoryPath = fs.existsSync(directory.filePath) ? directory.filePath : path.dirname(directory.filePath);
+      throw new UsageError(`Two rules with the id "${directory.id}": ${file.filePath} and ${directoryPath}. Keep only one of them.`);
+    }
+  }
+}
+
+// A directory in a rules directory is meant as a rule, so a missing RULE.md is reported, never skipped in silence.
+function withoutRuleFile(source: RuleSource): Judge {
+  const directory = path.basename(path.dirname(source.filePath));
+  const error = `error: \`${RULE_FILE}\` is missing: the rule directory ${directory}/ holds its rule in ${directory}/${RULE_FILE}`;
+  const missing = { valid: false, errors: [error], warnings: [] };
+  return toJudge(source.id, source.filePath, 'rule', { data: {}, content: '' } as matter.GrayMatterFile<string>, missing);
+}
+
+// The directory of a rule in the `<id>/RULE.md` form, where its tests live; undefined for any other judge.
+export function ruleDirectory(judge: Judge): string | undefined {
+  const isDirectoryRule = judge.format === 'rule' && path.basename(judge.filePath) === RULE_FILE;
+  return isDirectoryRule ? path.dirname(judge.filePath) : undefined;
+}
+
+// How `validate` names a rule's file: `RULE.md` alone would not say which rule it is.
+export function ruleFileName(judge: Judge): string {
+  const directory = ruleDirectory(judge);
+  return directory ? path.join(path.basename(directory), RULE_FILE) : path.basename(judge.filePath);
 }
 
 function loadJudgeFile(
@@ -98,15 +150,15 @@ function loadJudgeFile(
   filePath: string,
   format: Judge['format'],
   validate: (data: any) => ValidationResult,
-): Judge[] {
+): Judge {
   try {
     const parsed = matter(fs.readFileSync(filePath, 'utf-8'));
     const validation = validate(parsed.data);
-    return [toJudge(id, filePath, format, parsed, validation)];
+    return toJudge(id, filePath, format, parsed, validation);
   } catch (error: any) {
     // A rule that cannot be read is kept as invalid, so the report shows it instead of leaving it out.
     const unreadable = { valid: false, errors: [`cannot read the frontmatter: ${error.message}`], warnings: [] };
-    return [toJudge(id, filePath, format, { data: {}, content: '' } as matter.GrayMatterFile<string>, unreadable)];
+    return toJudge(id, filePath, format, { data: {}, content: '' } as matter.GrayMatterFile<string>, unreadable);
   }
 }
 

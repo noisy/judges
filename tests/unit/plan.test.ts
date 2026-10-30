@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPlan, skipOtherStage, SKIP_DETERMINISTIC, SKIP_NO_FILES_IN_SCOPE } from '../../src/plan.js';
+import { buildPlan, skipOtherStage, SKIP_NO_FILES_IN_SCOPE } from '../../src/plan.js';
 import { defaultSettings } from '../../src/validator.js';
 import { Judge } from '../../src/judges.js';
 import { EvaluationContext } from '../../src/types.js';
@@ -35,12 +35,6 @@ describe('buildPlan', () => {
     const [item] = buildPlan([invalid], context);
 
     expect(item).toEqual({ judge: invalid, invalid: 'invalid rule: severity: unknown value; model: unknown' });
-  });
-
-  it('skips a deterministic check without scoping it', () => {
-    const [item] = buildPlan([judge({ check: 'deterministic' })], context);
-
-    expect(item).toEqual(expect.objectContaining({ skip: SKIP_DETERMINISTIC }));
   });
 
   it('gives a judge with the default scope every file', () => {

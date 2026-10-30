@@ -32,6 +32,8 @@ const SECONDS_PER_UNIT: Record<string, number> = { s: 1, m: 60 };
 const ALLOW_READ_PATTERN = /^[^*?[\]{}]+?(\/\*\*)?$/;
 const ALLOW_READ_ERROR = '`allow_read` entries must be a directory, optionally ending in /** (relative to the repo root, absolute, or ~/)';
 const BUDGET_FORMAT_ERROR = '`budget` must look like "30s, $0.10" (time in s or m, cost in $, either part optional)';
+// A team that relied on its command must learn that it never runs, so these fields are rejected, not ignored.
+const NOT_A_RULE_FIELD = 'is not a rule field: every rule is checked by a model, and judges runs no commands. A check a linter or a test can do belongs there';
 
 const settingsFields = {
   mode: z.enum(['one-shot', 'agent']).optional(),
@@ -57,7 +59,7 @@ const settingsFields = {
 
   severity: z.enum(['low', 'medium', 'high']).optional().default('medium'),
 
-  check: z.enum(['judge', 'deterministic']).optional().default('judge'),
+  check: z.never({ error: `\`check\` ${NOT_A_RULE_FIELD}` }).optional(),
 
   model: z.string().min(1, '`model` cannot be empty').optional(),
 
@@ -71,7 +73,7 @@ const settingsFields = {
     .positive('`max_turns` must be positive')
     .optional(),
 
-  command: z.string().min(1, '`command` cannot be empty').optional(),
+  command: z.never({ error: `\`command\` ${NOT_A_RULE_FIELD}` }).optional(),
 };
 
 const JudgeSchema = z.object({
@@ -102,10 +104,13 @@ export function validateJudge(data: any): ValidationResult {
   return toValidationResult(JudgeSchema.safeParse(data));
 }
 
-export function validateRule(data: any, fileId: string): ValidationResult {
+// What a rule's id must match: the name of its `<id>.md` file, or of the directory that holds its `RULE.md`.
+export type IdSource = 'file name' | 'directory name';
+
+export function validateRule(data: any, fileId: string, named: IdSource = 'file name'): ValidationResult {
   const result = toValidationResult(RuleSchema.safeParse(data));
   if (data?.id !== undefined && data.id !== fileId) {
-    result.errors.push(`error: \`id\` "${data.id}" must match the file name "${fileId}"`);
+    result.errors.push(`error: \`id\` "${data.id}" must match the ${named} "${fileId}"`);
     return { ...result, valid: false, data: undefined };
   }
   return result;
@@ -146,8 +151,6 @@ interface SettingsInput {
   max_turns?: number;
   timeout_seconds?: number;
   budget?: Budget;
-  check: 'judge' | 'deterministic';
-  command?: string;
 }
 
 function checkSettingsConsistency(data: SettingsInput, ctx: z.RefinementCtx): void {
@@ -155,9 +158,6 @@ function checkSettingsConsistency(data: SettingsInput, ctx: z.RefinementCtx): vo
     ctx.addIssue({ code: 'custom', path: ['budget'], message: '`budget` time and `timeout_seconds` cannot both be set' });
   }
   checkContext(data, ctx);
-  if (data.command !== undefined && data.check !== 'deterministic') {
-    ctx.addIssue({ code: 'custom', path: ['command'], message: '`command` is only allowed with `check: deterministic`' });
-  }
 }
 
 // `mode` and `context` must agree, since the tool does not guess which one the author meant.

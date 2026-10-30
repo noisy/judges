@@ -9,7 +9,6 @@ export type PlanItem =
   | { judge: Judge; invalid: string };
 
 export const SKIP_NO_FILES_IN_SCOPE = 'no files in scope';
-export const SKIP_DETERMINISTIC = 'deterministic check (not executed yet)';
 
 // `ci` runs every rule; `commit` and `push` run only their own, so push does not repeat commit.
 function runsAtStage(judge: Judge, stage: Stage): boolean {
@@ -32,9 +31,6 @@ function planJudge(judge: Judge, context: EvaluationContext, stage?: Stage): Pla
   // Without a stage every rule runs, as before stages existed.
   if (stage !== undefined && !runsAtStage(judge, stage)) {
     return { judge, skip: skipOtherStage(judge, stage) };
-  }
-  if (judge.check === 'deterministic') {
-    return { judge, skip: SKIP_DETERMINISTIC };
   }
   const scoped = scopeContext(context, judge.scope);
   if (scoped.files.length === 0) {
