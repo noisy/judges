@@ -4,7 +4,8 @@ import { UsageError } from '../../src/config.js';
 import * as child_process from 'child_process';
 
 vi.mock('child_process', () => ({
-  execSync: vi.fn()
+  execSync: vi.fn(),
+  execFileSync: vi.fn(() => '')
 }));
 
 describe('Diff Extraction', () => {

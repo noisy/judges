@@ -4,7 +4,7 @@ import { claudeEngine } from './claude.js';
 import { codexEngine } from './codex.js';
 import { geminiEngine } from './gemini.js';
 
-export { TimeoutError } from './process.js';
+export { EngineStoppedError, TimeoutError } from './process.js';
 export type { Engine, EngineRequest, EngineResponse } from './types.js';
 
 const ENGINES: Record<SupportedEngine, Engine> = {

@@ -9,7 +9,17 @@ export class TimeoutError extends Error {
   }
 }
 
+// A run the CLI ended itself, on a limit or an error. What it reported having spent and examined
+// stays in the record: money spent on a failed rule is still money spent.
+export class EngineStoppedError extends Error {
+  constructor(message: string, readonly usage: EngineUsage) {
+    super(message);
+    this.name = 'EngineStoppedError';
+  }
+}
+
 export type OutputInterpretation = Omit<EngineResponse, 'durationMs'>;
+export type EngineUsage = Pick<EngineResponse, 'costUsd' | 'turns' | 'examined'>;
 
 interface CliAdapter {
   name: SupportedEngine;
@@ -20,6 +30,8 @@ interface CliAdapter {
   workingDir?(req: EngineRequest): string | undefined;
   // Human-readable reason for a non-zero exit, read from the CLI's own output.
   explainFailure?(stdout: string, req: EngineRequest): string | undefined;
+  // Cost, turns and tool calls a failed run still reported.
+  reportedUsage?(stdout: string, req: EngineRequest): EngineUsage;
 }
 
 interface CliResult {
@@ -45,7 +57,7 @@ export function createCliEngine(adapter: CliAdapter): Engine {
       const startedAt = Date.now();
       const result = await runCli(adapter.name, args, req.timeoutMs, adapter.workingDir?.(req));
       if (result.exitCode !== 0 && result.exitCode !== null) {
-        throw exitError(adapter.name, result, adapter.explainFailure?.(result.stdout, req));
+        throw exitError(adapter.name, result, adapter.explainFailure?.(result.stdout, req), adapter.reportedUsage?.(result.stdout, req));
       }
       return { ...adapter.interpretOutput(result.stdout, req), durationMs: Date.now() - startedAt };
     }
@@ -94,9 +106,9 @@ function runCli(command: string, args: string[], timeoutMs: number, cwd?: string
   });
 }
 
-function exitError(command: string, result: CliResult, explanation?: string): Error {
+function exitError(command: string, result: CliResult, explanation?: string, usage: EngineUsage = {}): Error {
   if (explanation) {
-    return new Error(`${command} CLI stopped: ${explanation}`);
+    return new EngineStoppedError(`${command} CLI stopped: ${explanation}`, usage);
   }
   const details = result.stderr || result.stdout;
   if (details.includes("You've hit your usage limit") || details.toLowerCase().includes('rate limit')) {

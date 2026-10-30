@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { EngineRequest } from './types.js';
-import { createCliEngine, OutputInterpretation } from './process.js';
+import { createCliEngine, EngineStoppedError, EngineUsage, OutputInterpretation } from './process.js';
 import { resolveModel } from './models.js';
 import { ExaminedTarget } from '../types.js';
 
@@ -87,17 +87,18 @@ export function interpretClaudeOutput(stdout: string, req: EngineRequest): Outpu
   if (!envelope) {
     return { rawOutput: stdout };
   }
+  const usage = usageOf(events, envelope, req);
   const failure = describeFailure(envelope, req);
   if (failure) {
-    throw new Error(`claude CLI stopped: ${failure}`);
+    throw new EngineStoppedError(`claude CLI stopped: ${failure}`, usage);
   }
-  const interpretation: OutputInterpretation = {
-    rawOutput: typeof envelope.result === 'string' ? envelope.result : '',
-    costUsd: asNumber(envelope.total_cost_usd),
-    turns: asNumber(envelope.num_turns)
-  };
-  if (req.mode === 'agent') interpretation.examined = examinedTargets(events, envelope, req.cwd);
-  return interpretation;
+  return { rawOutput: typeof envelope.result === 'string' ? envelope.result : '', ...usage };
+}
+
+export function reportedClaudeUsage(stdout: string, req: EngineRequest): EngineUsage {
+  const events = parseEvents(stdout);
+  const envelope = findResult(events);
+  return envelope ? usageOf(events, envelope, req) : {};
 }
 
 export function explainClaudeFailure(stdout: string, req: EngineRequest): string | undefined {
@@ -127,6 +128,13 @@ function parseObject(text: string): CliEvent | undefined {
   } catch {
     return undefined;
   }
+}
+
+// Cost and turns as the CLI reported them, and for an agent judge every tool call it made.
+function usageOf(events: CliEvent[], envelope: CliEvent, req: EngineRequest): EngineUsage {
+  const usage: EngineUsage = { costUsd: asNumber(envelope.total_cost_usd), turns: asNumber(envelope.num_turns) };
+  if (req.mode === 'agent') usage.examined = examinedTargets(events, envelope, req.cwd);
+  return usage;
 }
 
 function findResult(events: CliEvent[]): CliEvent | undefined {
@@ -174,5 +182,6 @@ export const claudeEngine = createCliEngine({
   workingDir: claudeWorkingDir,
   supportsAgentMode: true,
   interpretOutput: interpretClaudeOutput,
-  explainFailure: explainClaudeFailure
+  explainFailure: explainClaudeFailure,
+  reportedUsage: reportedClaudeUsage
 });

@@ -1,6 +1,7 @@
 import os from 'os';
 import { describe, it, expect } from 'vitest';
-import { buildClaudeArgs, claudeWorkingDir, explainClaudeFailure, interpretClaudeOutput, readAccessArgs } from '../../src/engines/claude.js';
+import { buildClaudeArgs, claudeWorkingDir, explainClaudeFailure, interpretClaudeOutput, readAccessArgs, reportedClaudeUsage } from '../../src/engines/claude.js';
+import { EngineStoppedError } from '../../src/engines/process.js';
 import { buildCodexArgs, codexEngine } from '../../src/engines/codex.js';
 import { buildGeminiArgs, geminiEngine } from '../../src/engines/gemini.js';
 import { resolveModel } from '../../src/engines/models.js';
@@ -163,7 +164,24 @@ describe('interpretClaudeOutput', () => {
 
     expect(() => interpretClaudeOutput(stdout, { ...baseRequest, maxBudgetUsd: 0.1 })).toThrow('claude CLI stopped: budget exceeded ($0.1)');
   });
+
+  it('keeps the cost and turns of a run stopped by its budget', () => {
+    const stdout = JSON.stringify({ type: 'result', subtype: 'error_max_budget_usd', is_error: true, total_cost_usd: 0.011, num_turns: 1 });
+
+    expect(stoppedUsage(() => interpretClaudeOutput(stdout, { ...baseRequest, maxBudgetUsd: 0.01 })))
+      .toEqual({ costUsd: 0.011, turns: 1 });
+  });
 });
+
+function stoppedUsage(run: () => unknown): unknown {
+  try {
+    run();
+  } catch (error) {
+    if (error instanceof EngineStoppedError) return error.usage;
+    throw error;
+  }
+  throw new Error('expected the run to stop');
+}
 
 describe('explainClaudeFailure', () => {
   it('explains budget and turn limits from the error envelope of a failed exit', () => {
@@ -246,6 +264,19 @@ describe('interpretClaudeOutput for agent streams', () => {
 
     expect(() => interpretClaudeOutput(stdout, { ...agentRequest, maxTurns: 8 })).toThrow('turn limit reached (8)');
     expect(explainClaudeFailure(stdout, { ...agentRequest, maxTurns: 8 })).toBe('turn limit reached (8)');
+  });
+
+  it('keeps the cost, turns and tool calls of a run stopped by its turn cap, whatever the exit code', () => {
+    const stdout = stream(toolUse('t1', 'Read', { file_path: '/repo/tests/test_greet.py' }),
+      JSON.stringify({ type: 'result', subtype: 'error_max_turns', is_error: true, total_cost_usd: 0.034, num_turns: 2 }));
+    const usage = { costUsd: 0.034, turns: 2, examined: [{ tool: 'Read', target: 'tests/test_greet.py' }] };
+
+    expect(stoppedUsage(() => interpretClaudeOutput(stdout, { ...agentRequest, maxTurns: 2 }))).toEqual(usage);
+    expect(reportedClaudeUsage(stdout, { ...agentRequest, maxTurns: 2 })).toEqual(usage);
+  });
+
+  it('reports no usage when the output is not CLI JSON', () => {
+    expect(reportedClaudeUsage('Segmentation fault', agentRequest)).toEqual({});
   });
 });
 
