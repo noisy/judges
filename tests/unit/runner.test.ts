@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runPlan, buildEngineRequest, attributeToRule } from '../../src/runner.js';
-import { getEngine, Engine, TimeoutError } from '../../src/engines/index.js';
+import { getEngine, Engine, EngineStoppedError, TimeoutError } from '../../src/engines/index.js';
 import { Judge } from '../../src/judges.js';
 import { PlanItem } from '../../src/plan.js';
 import { Marker } from '../../src/markers.js';
@@ -116,6 +116,17 @@ describe('runPlan outcome mapping', () => {
     expect(result.status).toBe('error');
     expect(result.issues).toEqual([]);
     expect(result.error).toBe('claude CLI not found on PATH');
+  });
+
+  it('keeps the cost, turns and examined targets of a run stopped on a limit', async () => {
+    const usage = { costUsd: 0.034, turns: 2, examined: [{ tool: 'Read', target: 'tests/test_greet.py' }] };
+    run.mockRejectedValue(new EngineStoppedError('claude CLI stopped: turn limit reached (2)', usage));
+
+    const [result] = await runPlan([planned()], 'claude');
+
+    expect(result.status).toBe('error');
+    expect(result.error).toBe('claude CLI stopped: turn limit reached (2)');
+    expect(result).toMatchObject({ ...usage, inline: ['a.ts'] });
   });
 });
 

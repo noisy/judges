@@ -1,4 +1,4 @@
-import { getEngine, EngineRequest, TimeoutError } from './engines/index.js';
+import { getEngine, EngineRequest, EngineStoppedError, TimeoutError } from './engines/index.js';
 import { parseLLMOutput } from './llm.js';
 import { constructPrompt } from './prompt.js';
 import { Judge, displayName } from './judges.js';
@@ -75,7 +75,8 @@ async function evaluateJudge(
       examined: response.examined };
   } catch (error: any) {
     const status = error instanceof TimeoutError ? 'timeout' : 'error';
-    return { status, issues: [], error: error.message };
+    const usage = error instanceof EngineStoppedError ? error.usage : {};
+    return { status, issues: [], error: error.message, ...usage };
   }
 }
 
