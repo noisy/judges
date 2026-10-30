@@ -1,6 +1,6 @@
 {
   "name": "judge-cli",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "AI-Powered Code Quality Assistant utilizing parallel specialized expert judges.",
   "main": "dist/index.js",
   "files": [
@@ -13,7 +13,8 @@
     "build": "tsc",
     "test": "vitest run",
     "dev": "tsx src/index.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "prepublishOnly": "npm run build && npm test"
   },
   "repository": {
     "type": "git",
