@@ -14,6 +14,10 @@ export interface EvaluationContext {
 
 export type SupportedEngine = 'claude' | 'codex' | 'gemini';
 
+// The gate a rule runs at: commit hook, push hook or pipeline.
+export const STAGES = ['commit', 'push', 'ci'] as const;
+export type Stage = typeof STAGES[number];
+
 export interface Issue {
   file: string;
   line: string | number;

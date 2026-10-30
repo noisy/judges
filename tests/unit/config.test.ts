@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseArgs, inputUsageError, ROOT_NEEDS_FILE_INPUT } from '../../src/config.js';
+import { parseArgs, inputUsageError, stageUsageError, ROOT_NEEDS_FILE_INPUT } from '../../src/config.js';
 
 describe('CLI Configuration Parsing', () => {
   it('should parse default boolean flags correctly', () => {
@@ -67,6 +67,11 @@ describe('CLI Configuration Parsing', () => {
     expect(args.engine).toBe('claude'); // Fallback to default
   });
 
+  it('should parse the --stage flag as given', () => {
+    expect(parseArgs([]).stage).toBeUndefined();
+    expect(parseArgs(['--stage', 'push']).stage).toBe('push');
+  });
+
   it('should collect repeatable --rules directories', () => {
     expect(parseArgs([]).ruleDirs).toEqual([]);
     expect(parseArgs(['--rules', 'rules']).ruleDirs).toEqual(['rules']);
@@ -87,3 +92,17 @@ describe('inputUsageError', () => {
   });
 });
 
+describe('stageUsageError', () => {
+  it.each(['commit', 'push', 'ci'])('accepts --stage %s', (stage) => {
+    expect(stageUsageError(parseArgs(['--stage', stage]))).toBeUndefined();
+  });
+
+  it('accepts no --stage at all', () => {
+    expect(stageUsageError(parseArgs(['--staged']))).toBeUndefined();
+  });
+
+  it.each([[['--stage', 'nightly']], [['--stage', 'Commit']], [['--stage']], [['--stage', 'commit', '--stage', 'push']]])(
+    'rejects an unknown stage: %j', (argv) => {
+      expect(stageUsageError(parseArgs(argv))).toMatch(/^Unknown stage .*expected one of commit, push, ci$/);
+    });
+});

@@ -3,7 +3,7 @@ import mri from 'mri';
 export const DEFAULT_MAX_ISSUES_TO_SHOW = 3;
 export const SEVERITY_SCORE: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
-import { SupportedEngine } from './types.js';
+import { STAGES, SupportedEngine } from './types.js';
 
 export interface AppConfig {
   file?: string | string[];
@@ -22,6 +22,7 @@ export interface AppConfig {
   engine: SupportedEngine;
   ruleDirs: string[];
   only: string[];
+  stage?: string;
   root?: string;
   command?: 'config' | 'markers';
   configAction?: 'check' | 'list' | 'show' | 'which';
@@ -37,9 +38,15 @@ export function inputUsageError(config: AppConfig): string | undefined {
   return undefined;
 }
 
+// The name is checked here, not in parseArgs, so an unknown one is a usage error rather than a silent default.
+export function stageUsageError(config: AppConfig): string | undefined {
+  if (config.stage === undefined || (STAGES as readonly string[]).includes(config.stage)) return undefined;
+  return `Unknown stage "${config.stage}": expected one of ${STAGES.join(', ')}`;
+}
+
 export function parseArgs(argv: string[]): AppConfig {
   const parsed = mri(argv, {
-    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules', 'only', 'root'],
+    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules', 'only', 'root', 'stage'],
     boolean: ['json', 'help', 'version', 'short', 'full', 'staged', 'diff', 'last-commit', 'check', 'list'],
     alias: {
       f: 'file',
@@ -121,6 +128,7 @@ export function parseArgs(argv: string[]): AppConfig {
     engine,
     ruleDirs,
     only,
+    stage: parsed.stage === undefined ? undefined : String(parsed.stage),
     root: parsed.root,
     command,
     configAction,

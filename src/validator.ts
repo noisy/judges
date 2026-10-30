@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { STAGES } from './types.js';
 
 export interface ValidationResult {
   valid: boolean;
@@ -46,6 +47,8 @@ const settingsFields = {
   scope: z.array(z.string().min(1, '`scope` globs cannot be empty')).optional().default(['**/*']),
 
   severity: z.enum(['low', 'medium', 'high']).optional().default('medium'),
+
+  stage: z.enum(STAGES).optional().default('commit'),
 
   check: z.enum(['judge', 'deterministic']).optional().default('judge'),
 

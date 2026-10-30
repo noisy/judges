@@ -170,6 +170,18 @@ describe('validateRule', () => {
     expect(result.errors[0]).toContain('only allowed with `check: deterministic`');
   });
 
+  it('should make a rule without stage a commit rule, and keep a given stage', () => {
+    expect(validateRule({ id: 'r' }, 'r').data.stage).toBe('commit');
+    expect(validateRule({ id: 'r', stage: 'push' }, 'r').data.stage).toBe('push');
+    expect(validateRule({ id: 'r', stage: 'ci' }, 'r').data.stage).toBe('ci');
+  });
+
+  it('should reject an unknown stage', () => {
+    const result = validateRule({ id: 'r', stage: 'nightly' }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toContain('`stage`');
+  });
+
   it('should reject non-positive max_turns', () => {
     const result = validateRule({ id: 'r', max_turns: 0 }, 'r');
     expect(result.valid).toBe(false);

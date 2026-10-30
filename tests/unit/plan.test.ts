@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPlan, SKIP_DETERMINISTIC, SKIP_NO_FILES_IN_SCOPE } from '../../src/plan.js';
+import { buildPlan, skipOtherStage, SKIP_DETERMINISTIC, SKIP_NO_FILES_IN_SCOPE } from '../../src/plan.js';
 import { defaultSettings } from '../../src/validator.js';
 import { Judge } from '../../src/judges.js';
 import { EvaluationContext } from '../../src/types.js';
@@ -61,3 +61,39 @@ describe('buildPlan', () => {
     expect('markers' in item && item.markers.map((m) => [m.file, m.reason])).toEqual([['src/a.ts', 'external key']]);
   });
 });
+
+describe('buildPlan with a stage', () => {
+  const rules = [
+    judge({ id: 'commit-rule', stage: 'commit' }),
+    judge({ id: 'push-rule', stage: 'push' }),
+    judge({ id: 'ci-rule', stage: 'ci' })
+  ];
+
+  function ran(stage?: 'commit' | 'push' | 'ci'): string[] {
+    return buildPlan(rules, context, stage).filter((item) => 'context' in item).map((item) => item.judge.id);
+  }
+
+  it('runs only the rules of its own stage at commit and at push', () => {
+    expect(ran('commit')).toEqual(['commit-rule']);
+    expect(ran('push')).toEqual(['push-rule']);
+  });
+
+  it('runs every rule at ci and without a stage', () => {
+    expect(ran('ci')).toEqual(['commit-rule', 'push-rule', 'ci-rule']);
+    expect(ran()).toEqual(['commit-rule', 'push-rule', 'ci-rule']);
+  });
+
+  it('skips a rule of another stage with a reason that starts with its stage', () => {
+    const [, push] = buildPlan(rules, context, 'commit');
+
+    expect(push).toEqual(expect.objectContaining({ skip: skipOtherStage(rules[1], 'commit') }));
+    expect('skip' in push && push.skip).toMatch(/^stage push/);
+  });
+
+  it('reports the stage, not the scope, for a rule of another stage with no files in scope', () => {
+    const [item] = buildPlan([judge({ stage: 'push', scope: ['docs/**'] })], context, 'commit');
+
+    expect('skip' in item && item.skip).toMatch(/^stage push/);
+  });
+});
+

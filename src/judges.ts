@@ -3,6 +3,7 @@ import * as path from 'path';
 import os from 'os';
 import matter from 'gray-matter';
 import { validateJudge, validateRule, defaultSettings, ValidationResult } from './validator.js';
+import { Stage } from './types.js';
 
 export interface Judge {
   id: string; // Directory name for JUDGE.md, file name for rules
@@ -14,6 +15,7 @@ export interface Judge {
   max_budget_usd?: number;
   scope: string[];
   severity: 'low' | 'medium' | 'high';
+  stage: Stage;
   check: 'judge' | 'deterministic';
   model?: string;
   tools: string[];
