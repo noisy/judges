@@ -12,6 +12,7 @@ import { findMarkersInFiles } from './markers.js';
 import { groupByRule, formatInventory } from './inventory.js';
 import { formatIssuesList, formatJudgeFailure } from './format.js';
 import { shouldBlock } from './gate.js';
+import { withoutRuleFixtures } from './fixtures.js';
 import { testRules, testExitCode, formatTestResults } from './rule-test.js';
 import colors from 'picocolors';
 import { createRequire } from 'module';
@@ -105,7 +106,7 @@ async function main() {
 
   let inputContext: EvaluationContext;
   try {
-    inputContext = resolveInputContext(config);
+    inputContext = withoutRuleFixtures(resolveInputContext(config), loaded);
   } catch (error: any) {
     if (!config.json) {
       console.error(colors.red(`\n❌ Error: ${error.message}\n`));
