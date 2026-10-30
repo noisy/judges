@@ -37,7 +37,7 @@ async function main() {
   const usageError = inputUsageError(config);
   if (usageError) {
     console.error(colors.red(`❌ Error: ${usageError}`));
-    process.exit(1);
+    process.exit(USAGE_ERROR_EXIT_CODE);
   }
 
   if (config.command === 'markers') {
@@ -79,18 +79,8 @@ async function main() {
     return;
   }
 
-  const validJudges = judges.filter(j => {
-    if (!j.isValid) {
-      if (!config.json) {
-        console.warn(colors.yellow(`⚠ skipping ${j.filePath} — invalid:\n  └─ ${j.validationErrors.join('\n  └─ ')}`));
-      }
-      return false;
-    }
-    return true;
-  });
-
-  if (validJudges.length === 0) {
-    console.log("No valid judges found in ~/.judge/judges/, ./.judge/judges/ or --rules directories");
+  if (judges.length === 0) {
+    console.log("No judges found in ~/.judge/judges/, ./.judge/judges/ or --rules directories");
     return;
   }
 
@@ -110,7 +100,7 @@ async function main() {
     return;
   }
   
-  const results = await orchestrateEvaluation(validJudges, inputContext, loaded.map(j => j.id), config);
+  const results = await orchestrateEvaluation(judges, inputContext, loaded.map(j => j.id), config);
 
   if (config.json) {
     console.log(JSON.stringify(results, null, 2));
@@ -135,7 +125,7 @@ function loadJudgesOrExit(config: AppConfig): { loaded: Judge[]; selected: Judge
     return { loaded, selected };
   } catch (error: any) {
     console.error(colors.red(`❌ Error: ${error.message}`));
-    process.exit(1);
+    process.exit(error instanceof UsageError ? USAGE_ERROR_EXIT_CODE : 1);
   }
 }
 

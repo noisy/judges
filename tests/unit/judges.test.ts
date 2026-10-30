@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { loadJudges, selectJudges, Judge } from '../../src/judges.js';
+import { UsageError } from '../../src/config.js';
 
 let root: string;
 
@@ -73,7 +74,7 @@ describe('loadJudges', () => {
 
   it('throws when an explicit rules directory does not exist', () => {
     expect(() => loadJudges({ legacyDirs: [], ruleDirs: [path.join(root, 'nope')] }))
-      .toThrow('Rules directory not found');
+      .toThrow(UsageError);
   });
 
   it('lets rules override legacy judges with the same id', () => {
@@ -103,6 +104,14 @@ describe('loadJudges', () => {
     expect(rule).toMatchObject({ name: 'booleans', timeout_seconds: 30, severity: 'medium' });
   });
 
+  it('keeps a rule whose frontmatter is not valid YAML, marked invalid', () => {
+    const rulesDir = writeFile('rules/booleans.md', '---\nid: booleans\nscope: ["src/**\n---\nBody.');
+    const [rule] = loadJudges({ legacyDirs: [], ruleDirs: [rulesDir] });
+
+    expect(rule).toMatchObject({ id: 'booleans', isValid: false });
+    expect(rule.validationErrors.join(' ')).toContain('cannot read the frontmatter');
+  });
+
   it('loads a deterministic rule with a command and no body', () => {
     const rulesDir = writeFile('rules/lint.md', '---\nid: lint\ncheck: deterministic\ncommand: npm run lint\n---\n');
     const [rule] = loadJudges({ legacyDirs: [], ruleDirs: [rulesDir] });
@@ -123,6 +132,6 @@ describe('selectJudges', () => {
   });
 
   it('throws naming every unknown id', () => {
-    expect(() => selectJudges(judges, ['a', 'x', 'y'])).toThrow('Unknown judge or rule id: x, y');
+    expect(() => selectJudges(judges, ['a', 'x', 'y'])).toThrow(new UsageError('Unknown judge or rule id: x, y'));
   });
 });

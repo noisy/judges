@@ -62,6 +62,9 @@ function emptyDiffError(command: string, mode: DiffMode, baseRef?: string): Erro
   if (mode === 'base') {
     return new UsageError(`No changes on this branch since it left '${baseRef}' (${command}).`);
   }
+  if (mode === 'staged') {
+    return new UsageError(`Nothing is staged (${command}). Stage your changes with git add, or use path mode (e.g., 'judge .').`);
+  }
   return new Error(`No git diff found (${command}). Make sure you have uncommitted changes or use path mode (e.g., 'judge .').`);
 }
 

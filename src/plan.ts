@@ -5,7 +5,8 @@ import { EvaluationContext } from './types.js';
 
 export type PlanItem =
   | { judge: Judge; context: EvaluationContext; markers: Marker[] }
-  | { judge: Judge; skip: string };
+  | { judge: Judge; skip: string }
+  | { judge: Judge; invalid: string };
 
 export const SKIP_NO_FILES_IN_SCOPE = 'no files in scope';
 export const SKIP_DETERMINISTIC = 'deterministic check (not executed yet)';
@@ -15,6 +16,9 @@ export function buildPlan(judges: Judge[], context: EvaluationContext): PlanItem
 }
 
 function planJudge(judge: Judge, context: EvaluationContext): PlanItem {
+  if (!judge.isValid) {
+    return { judge, invalid: `invalid rule: ${judge.validationErrors.join('; ')}` };
+  }
   if (judge.check === 'deterministic') {
     return { judge, skip: SKIP_DETERMINISTIC };
   }

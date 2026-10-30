@@ -67,6 +67,17 @@ describe('scopeContext', () => {
     expect(scoped.files.map((f) => f.path)).toEqual(['src/a.ts']);
   });
 
+  it('drops files that match a negated glob, even when a positive glob matches them', () => {
+    const scoped = scopeContext(diffContext, ['src/**', '!src/connectors/**']);
+
+    expect(scoped.files.map((f) => f.path)).toEqual(['src/a.ts']);
+    expect(scoped.rawDiff).toBe(tsSection);
+  });
+
+  it('keeps nothing when the scope has only negated globs', () => {
+    expect(scopeContext(diffContext, ['!src/connectors/**']).files).toEqual([]);
+  });
+
   it('keeps everything under the default scope, including dotfiles', () => {
     const withDotfile = { ...diffContext, files: [...diffContext.files, { path: '.github/ci.yml', content: '' }] };
 

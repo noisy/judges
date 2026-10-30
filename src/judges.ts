@@ -3,6 +3,7 @@ import * as path from 'path';
 import os from 'os';
 import matter from 'gray-matter';
 import { validateJudge, validateRule, defaultSettings, ValidationResult } from './validator.js';
+import { UsageError } from './config.js';
 
 export interface Judge {
   id: string; // Directory name for JUDGE.md, file name for rules
@@ -61,7 +62,7 @@ export function selectJudges(judges: Judge[], ids: string[]): Judge[] {
   const knownIds = new Set(judges.map(judge => judge.id));
   const unknownIds = ids.filter(id => !knownIds.has(id));
   if (unknownIds.length > 0) {
-    throw new Error(`Unknown judge or rule id: ${unknownIds.join(', ')}`);
+    throw new UsageError(`Unknown judge or rule id: ${unknownIds.join(', ')}`);
   }
   return judges.filter(judge => ids.includes(judge.id));
 }
@@ -80,7 +81,7 @@ function findJudgeMdsInDir(baseDir: string): Judge[] {
 
 function findRulesInDir(baseDir: string): Judge[] {
   if (!fs.existsSync(baseDir)) {
-    throw new Error(`Rules directory not found: ${baseDir}`);
+    throw new UsageError(`Rules directory not found: ${baseDir}`);
   }
 
   return fs.readdirSync(baseDir, { withFileTypes: true })
@@ -100,8 +101,9 @@ function loadJudgeFile(
     const validation = validate(parsed.data);
     return [toJudge(id, filePath, format, parsed, validation)];
   } catch (error: any) {
-    console.error(`Error parsing ${filePath}:`, error.message);
-    return [];
+    // A rule that cannot be read is kept as invalid, so the report shows it instead of leaving it out.
+    const unreadable = { valid: false, errors: [`cannot read the frontmatter: ${error.message}`], warnings: [] };
+    return [toJudge(id, filePath, format, { data: {}, content: '' } as matter.GrayMatterFile<string>, unreadable)];
   }
 }
 

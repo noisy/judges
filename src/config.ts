@@ -37,11 +37,15 @@ export const USAGE_ERROR_EXIT_CODE = 2;
 // A mistake in how the tool was called, found before any rule runs.
 export class UsageError extends Error {}
 
-// Diff paths are relative to the git root, so a different root would not match them.
 export function inputUsageError(config: AppConfig): string | undefined {
+  // Diff paths are relative to the git root, so a different root would not match them.
   const hasFileInput = config.paths.length > 0 || config.file !== undefined;
   if (config.command === undefined && config.root !== undefined && !hasFileInput) return ROOT_NEEDS_FILE_INPUT;
   if (config.base === '') return BASE_NEEDS_REF;
+  // An unknown threshold would turn the gate off in silence.
+  if (config.failOn !== undefined && !Object.hasOwn(SEVERITY_SCORE, config.failOn)) {
+    return `Unknown --fail-on value '${config.failOn}'. Use low, medium or high.`;
+  }
   return undefined;
 }
 

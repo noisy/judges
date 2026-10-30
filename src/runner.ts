@@ -20,15 +20,24 @@ export async function runPlan(
 }
 
 async function runPlanItem(item: PlanItem, engine: SupportedEngine, onProgress: ProgressListener): Promise<JudgeResult> {
-  const result = 'skip' in item
-    ? skippedResult(item.judge, item.skip)
-    : await runJudge(item.judge, item.context, item.markers, engine, onProgress);
+  const result = await resultOf(item, engine, onProgress);
   onProgress({ judgeId: item.judge.id, state: 'done', result });
   return result;
 }
 
+async function resultOf(item: PlanItem, engine: SupportedEngine, onProgress: ProgressListener): Promise<JudgeResult> {
+  if ('skip' in item) return skippedResult(item.judge, item.skip);
+  if ('invalid' in item) return invalidResult(item.judge, item.invalid);
+  return runJudge(item.judge, item.context, item.markers, engine, onProgress);
+}
+
 function skippedResult(judge: Judge, skipReason: string): JudgeResult {
   return { ...judgeIdentity(judge), status: 'skipped', issues: [], durationMs: 0, skipReason };
+}
+
+// An invalid rule is never sent to the model; it is reported so it is not mistaken for a passing one.
+function invalidResult(judge: Judge, error: string): JudgeResult {
+  return { ...judgeIdentity(judge), status: 'error', issues: [], durationMs: 0, error };
 }
 
 async function runJudge(
