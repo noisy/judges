@@ -196,6 +196,18 @@ describe('validateRule', () => {
     expect(result.errors).toEqual(['error: `effort` must be one of: low, medium, high, xhigh, max']);
   });
 
+  it('should keep a whole min_confidence from 0 to 100', () => {
+    expect(validateRule({ id: 'r', min_confidence: 70 }, 'r').data.min_confidence).toBe(70);
+    expect(validateRule({ id: 'r', min_confidence: 0 }, 'r').valid).toBe(true);
+    expect(validateRule({ id: 'r', min_confidence: 100 }, 'r').valid).toBe(true);
+  });
+
+  it.each([0.7, 70.5, 101, -1, '70'])('should reject min_confidence %j', (value) => {
+    const result = validateRule({ id: 'r', min_confidence: value }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(['error: `min_confidence` must be a whole number from 0 to 100']);
+  });
+
   it('should reject non-positive max_turns', () => {
     const result = validateRule({ id: 'r', max_turns: 0 }, 'r');
     expect(result.valid).toBe(false);

@@ -38,7 +38,7 @@ export function invalidVerdict(problem: string): Verdict {
 }
 
 // A finding over a range of lines is at a place when the range overlaps the place's lines.
-function isAt(finding: Issue, place: Place): boolean {
+export function isAt(finding: Issue, place: Place): boolean {
   if (!samePath(finding.file, place.file)) return false;
   if (place.lines === undefined) return true;
   const range = parseLineRange(finding.line);

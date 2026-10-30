@@ -6,12 +6,14 @@ import { PlanItem } from './plan.js';
 import { Marker, markerPlace, namedMarker } from './markers.js';
 import { dropOutsideDiff } from './diff-lines.js';
 import { dropNonFindings } from './non-findings.js';
+import { splitByConfidence, withConfidence } from './confidence.js';
 import { SEVERITY_SCORE } from './config.js';
 import { repoRoot } from './files.js';
 import { EvaluationContext, Issue, JudgeEvent, JudgeResult, SupportedEngine, UNKNOWN_TOKENS } from './types.js';
 
 type JudgeOutcome = Pick<JudgeResult,
-  'status' | 'stopReason' | 'issues' | 'covered' | 'suppressed' | 'outsideDiff' | 'dismissed' | 'error' | 'costUsd'
+  'status' | 'stopReason' | 'issues' | 'covered' | 'suppressed' | 'outsideDiff' | 'dismissed' | 'belowThreshold' | 'error'
+  | 'costUsd'
   | 'costEstimated' | 'tokens' | 'tokensEstimated' | 'turns' | 'examined'>;
 // A one-shot call is one turn, also when the engine does not say so or was killed before its answer.
 const ONE_SHOT_TURNS = 1;
@@ -67,6 +69,7 @@ async function runJudge(
     suppressed: outcome.suppressed,
     outsideDiff: outcome.outsideDiff,
     dismissed: outcome.dismissed,
+    belowThreshold: outcome.belowThreshold,
     durationMs: Date.now() - startedAt,
     costUsd: outcome.costUsd ?? null,
     costEstimated: outcome.costEstimated ?? false,
@@ -101,11 +104,12 @@ async function evaluateJudge(
     const { rawOutput, durationMs: _, ...usage } = await getEngine(engine).run(
       buildEngineRequest(judge, prompt, context.root ?? repoRoot()));
     // Covered first: the judge may word a covered violation as accepted, and it may sit on an old line.
-    const { covered, kept } = splitCovered(parseLLMOutput(rawOutput), markers);
+    const { covered, kept } = splitCovered(parseLLMOutput(rawOutput).map(withConfidence), markers);
     const { kept: violations, dismissed } = dropNonFindings(kept);
     const { kept: inChange, outsideDiff } = dropOldFindings(judge, attributeToRule(judge, violations), context);
-    return { status: 'ok', issues: sortBySeverity(inChange), covered: attributeToRule(judge, covered),
-      suppressed: covered.length, outsideDiff, dismissed, ...usage };
+    const { kept: reported, belowThreshold } = splitByConfidence(inChange, judge.min_confidence);
+    return { status: 'ok', issues: sortBySeverity(reported), covered: attributeToRule(judge, covered),
+      suppressed: covered.length, outsideDiff, dismissed, belowThreshold, ...usage };
   } catch (error: any) {
     if (!(error instanceof EngineStoppedError)) return { status: 'error', issues: [], error: error.message };
     // A stopped rule reports none of its findings: its answer was cut off, and a partial list looks like a full one.

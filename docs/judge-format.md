@@ -12,7 +12,7 @@ Each `JUDGE.md` file defines an independent AI evaluator in `judge-cli`. The fil
 | `mode` | `'one-shot' \| 'agent'` | No | `'one-shot'` | `one-shot` sees only the text it is given; `agent` may read the repository. See [Agent judges](#agent-judges). |
 | `timeout_seconds` | `number` | No | `30` | Execution timeout in seconds. Must be a positive integer. |
 
-`JUDGE.md` files also accept the rule settings below (`scope`, `severity`, `model`, `effort`, `budget`, `tools`, `max_turns`).
+`JUDGE.md` files also accept the rule settings below (`scope`, `severity`, `model`, `effort`, `min_confidence`, `budget`, `tools`, `max_turns`).
 
 ## Minimal Valid `JUDGE.md` Example
 
@@ -64,6 +64,7 @@ A rule is a Markdown file `<dir>/<id>.md`, or a directory `<dir>/<id>/` that hol
 | `severity` | `'low' \| 'medium' \| 'high'` | No | `'medium'` | Severity of a violation. |
 | `model` | `string` | No | engine default | Alias (`small`, `medium`, `large`) or an exact model id. |
 | `effort` | `'low' \| 'medium' \| 'high' \| 'xhigh' \| 'max'` | No | engine default | How hard the model thinks. Passed to `claude` as `--effort <level>`, for one-shot and agent rules; without it no flag is passed. `codex` and `gemini` have no effort flag and ignore it. Any other value makes the rule invalid. `--json` records it per rule as `effort`. |
+| `min_confidence` | `number` | No | - | A whole number from 0 to 100. A finding with a lower confidence is not reported and never blocks; see [Confidence](#confidence). Anything else makes the rule invalid. |
 | `budget` | `string` | No | - | Time and cost caps, e.g. `30s, $0.10` or `2m`. Either part is optional. The time part sets `timeout_seconds`; setting both is an error. |
 | `mode` | `'one-shot' \| 'agent'` | No | `'one-shot'` | Same as for `JUDGE.md`. |
 | `tools` | `string[]` | No | agent: `[Read, Grep, Glob]` | Only with `mode: agent`. Read-only tools only: `Read`, `Grep`, `Glob`. |
@@ -82,6 +83,26 @@ budget: 30s, $0.10
 Intent: a connector is a thin adapter to one external service.
 Rule: one HTTP call per public function; no calls to other connector functions; no branching on domain data.
 ```
+
+## Confidence
+
+The judge gives each finding a `confidence` in percent, a whole number from 0 to 100, on this scale:
+
+| Confidence | Means |
+| :--- | :--- |
+| 90 to 100 | a clear violation: the rule says so directly |
+| 70 | likely, with one small assumption |
+| 50 | could go either way |
+| 30 or less | probably fine, reported only to be safe |
+
+A fraction is rounded. An older answer with `high`, `medium` or `low` reads as 90, 60 or 30. Anything else, such as 150, is `null`; the finding is still a finding.
+
+`min_confidence: 70` keeps 70 and over:
+
+- A finding under it is not reported: it is not in the findings, does not block `--fail-on`, and is not in any CI report. `--json` lists it in the rule's `belowThreshold`, with its confidence, and the summary line says `2 findings below min_confidence 70 not reported`.
+- A finding without a confidence is never dropped.
+- Markers come first: a finding a marker covers stays in `covered`, whatever its confidence.
+- Set it per rule, from the rule's own tests: `judge test` shows where a threshold would work. See [Choosing min_confidence](#choosing-min_confidence).
 
 ## Agent judges
 
@@ -287,9 +308,9 @@ judge test --rules rules
 judge test --rules rules --only no-print-calls --json
 ```
 
-Without `--json`, one line per test: `✔ <rule>/<test> (review)`, `✘ <rule>/<test> (audit): <reason>` or `○ <rule>: skipped (no tests)`, then a count of each status. A rule without tests is skipped and does not fail the run. `judge test` exits `0` when no test failed, `1` when one failed (a test whose rule stopped fails as `did-not-run`; there is no exit `3`), and `2` on a usage error, such as an unknown `--only` id or a missing rules directory. `--rules`, `--only` and `--engine` work as in a review.
+Without `--json`, one line per test: `✔ <rule>/<test> (review)`, `✘ <rule>/<test> (audit): <reason>` or `○ <rule>: skipped (no tests)`, a calibration line after each rule's tests (see [Choosing min_confidence](#choosing-min_confidence)), then a count of each status and, when a test called the model, the cost line of the run. A rule without tests is skipped and does not fail the run. `judge test` exits `0` when no test failed, `1` when one failed (a test whose rule stopped fails as `did-not-run`; there is no exit `3`), and `2` on a usage error, such as an unknown `--only` id or a missing rules directory. `--rules`, `--only` and `--engine` work as in a review.
 
-`--json` prints an array with one entry per test, sorted by rule id and then test name:
+`--json` prints an array with one entry per test, sorted by rule id and then test name, and after each rule's tests its calibration entry:
 
 ```json
 [
@@ -298,11 +319,25 @@ Without `--json`, one line per test: `✔ <rule>/<test> (review)`, `✘ <rule>/<
     "rule": "no-print-calls", "test": "prints-in-loop", "mode": "review", "status": "failed",
     "reason": "missed: expected findings, got none", "findings": [],
     "run": { "status": "ok", "durationMs": 812, "costUsd": 0.002, "turns": 1, "inline": ["src/report.py"] }
-  }
+  },
+  { "rule": "no-print-calls", "calibration": { "neededMin": 82, "forbiddenMax": 41 } }
 ]
 ```
 
-`status` is `passed`, `failed` or `skipped`, `reason` is null for a passed test, and `findings` have paths relative to the test's repository. `run` holds the fields of a review result (`status`, `stopReason`, `durationMs`, `costUsd`, `tokens`, `turns`, `inline`, `examined`, `error`, `skipReason`, ...); it is null when the rule was never started: a rule without tests, or an invalid test.
+`status` is `passed`, `failed` or `skipped`, `reason` is null for a passed test, and `findings` have paths relative to the test's repository. `run` holds the fields of a review result (`status`, `stopReason`, `durationMs`, `costUsd`, `tokens`, `turns`, `inline`, `examined`, `error`, `skipReason`, ...); it is null when the rule was never started: a rule without tests, or an invalid test. Each finding has its `confidence`; the findings under the rule's `min_confidence` are in `run.belowThreshold`.
+
+### Choosing min_confidence
+
+A rule's `min_confidence` applies in its tests too: a test passes or fails on the reported findings. After a rule's tests, `judge test` shows the lowest confidence of a needed finding and the highest confidence of a forbidden one:
+
+```
+no-print-calls: needed findings 82 or more, forbidden 41 or less
+```
+
+- Needed: a finding at a `must` place. Forbidden: a finding at a `must_not` place, or any finding of an `expect: clean` test.
+- Both count the findings under the threshold too, so a dropped finding still shows where it was.
+- A `min_confidence` between the two (here 42 to 82) keeps every needed finding and drops every forbidden one. When the forbidden number is the higher one, no threshold separates them: improve the rule or its tests.
+- `null` in `--json` (`no needed finding` or `no forbidden finding` in the text) means no such finding had a confidence.
 
 ### A review never reviews tests
 

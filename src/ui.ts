@@ -11,6 +11,7 @@ interface JudgeProgress {
   state: JudgeState;
   issues?: Issue[];
   suppressed?: number;
+  belowThreshold?: Issue[];
   examined?: ExaminedTarget[];
   status?: JudgeStatus;
   stopReason?: StopReason;
@@ -40,6 +41,7 @@ export class ProgressRenderer {
       p.stopReason = event.result.stopReason;
       p.issues = event.result.issues;
       p.suppressed = event.result.suppressed;
+      p.belowThreshold = event.result.belowThreshold;
       p.examined = event.result.examined;
       p.error = event.result.error;
       p.skipReason = event.result.skipReason;
@@ -77,22 +79,35 @@ export class ProgressRenderer {
       } else if (p.state === 'done' && p.status === 'error') {
          output += `  ${colors.yellow('⚠')} ${colors.bold(p.displayName)}: error — ${firstLine(p.error)}\n`;
       } else if (p.state === 'done') {
-         output += `${issueSummaryLine(p.displayName, p.issues || [], p.suppressed, p.examined)}\n`;
+         output += `${issueSummaryLine(p.displayName, p.issues || [], p.suppressed, p.examined,
+           belowThresholdNote(p.belowThreshold?.length ?? 0, p.judge.min_confidence))}\n`;
       }
     }
     logUpdate(output);
   }
 }
 
-export function issueSummaryLine(name: string, issues: Issue[], suppressed = 0, examined: ExaminedTarget[] = []): string {
+export function issueSummaryLine(
+  name: string,
+  issues: Issue[],
+  suppressed = 0,
+  examined: ExaminedTarget[] = [],
+  belowThreshold = ''
+): string {
   const suppressedNote = suppressed > 0 ? `${suppressed} suppressed by markers` : '';
   const examinedNote = examinedSummary(examined);
   if (issues.length === 0) {
-    const notes = [suppressedNote, examinedNote].filter(Boolean).join('; ');
+    const notes = [suppressedNote, belowThreshold, examinedNote].filter(Boolean).join('; ');
     return `  ${colors.green('✔')} ${name}: 0 issues${notes ? ` (${notes})` : ''}`;
   }
-  const details = [severityCounts(issues), suppressedNote, examinedNote].filter(Boolean).join('; ');
+  const details = [severityCounts(issues), suppressedNote, belowThreshold, examinedNote].filter(Boolean).join('; ');
   return `  ${colors.red('✘')} ${colors.bold(name)}: ${issues.length} issues (${details})`;
+}
+
+// "2 findings below min_confidence 70 not reported"; empty when the threshold dropped nothing.
+export function belowThresholdNote(count: number, minConfidence?: number): string {
+  if (count === 0) return '';
+  return `${count} ${count === 1 ? 'finding' : 'findings'} below min_confidence ${minConfidence} not reported`;
 }
 
 // "read 4 files, 2 searches": what an agent judge looked at; the full list is in --json.

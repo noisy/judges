@@ -30,6 +30,14 @@ describe('numberLines', () => {
 });
 
 describe('constructPrompt', () => {
+  it('asks for a confidence in percent, with its scale, in every mode', () => {
+    for (const judge of [oneShot, diffOnly, agent]) {
+      const prompt = constructPrompt(judge, diffContext);
+      expect(prompt).toContain('"confidence": "number (how sure you are that this is a violation, in percent');
+      expect(prompt).toContain('- 90 to 100: a clear violation, the rule says so directly');
+    }
+  });
+
   it('shows file contents with line numbers and asks for those numbers in both modes', () => {
     for (const judge of [oneShot, agent]) {
       const prompt = constructPrompt(judge, filesContext);

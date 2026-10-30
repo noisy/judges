@@ -3,7 +3,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { testRules, testExitCode, formatTestResults, TestEntry } from '../../src/rule-test.js';
+import { testRules, testExitCode, formatTestResults, TestEntry, TestReportEntry } from '../../src/rule-test.js';
 import { withoutRuleTests } from '../../src/rule-test-spec.js';
 import { getEngine, Engine } from '../../src/engines/index.js';
 import { defaultSettings } from '../../src/validator.js';
@@ -45,8 +45,12 @@ function prompts(): string[] {
   return run.mock.calls.map(([request]) => request.prompt);
 }
 
-function summary(entries: TestEntry[]) {
-  return entries.map(({ rule, test, mode, status, reason }) => ({ rule, test, mode, status, reason }));
+function summary(entries: TestReportEntry[]) {
+  return testEntries(entries).map(({ rule, test, mode, status, reason }) => ({ rule, test, mode, status, reason }));
+}
+
+function testEntries(entries: TestReportEntry[]): TestEntry[] {
+  return entries.filter((entry): entry is TestEntry => 'status' in entry);
 }
 
 const CART = 'def total(items):\n    return sum(items)\n';
@@ -327,7 +331,23 @@ describe('which tests run', () => {
 
     const entries = await testRules([rule('b-rule'), rule('a-rule')], 'claude');
 
-    expect(entries.map((entry) => `${entry.rule}/${entry.test}`)).toEqual(['a-rule/only', 'b-rule/a-test', 'b-rule/b-test']);
+    expect(entries.map((entry) => `${entry.rule}/${'test' in entry ? entry.test : 'calibration'}`)).toEqual(
+      ['a-rule/only', 'a-rule/calibration', 'b-rule/a-test', 'b-rule/b-test', 'b-rule/calibration']);
+  });
+
+  it('applies min_confidence to the verdict, and calibrates on every finding, the dropped ones too', async () => {
+    writeFile('no-print/tests/prints/test.yaml', 'expect: findings\nmust:\n  - file: src/a.py\n    lines: 1\nmust_not:\n  - file: src/a.py\n    lines: 2\n');
+    writeFile('no-print/tests/prints/repo/src/a.py', 'print(1)  # CANARY_PRINTS\nlog(2)\n');
+    writeFile('no-print/tests/logs/test.yaml', 'expect: clean\n');
+    writeFile('no-print/tests/logs/repo/src/a.py', 'log(1)  # CANARY_LOGS\n');
+    run.mockImplementation(({ prompt }) => replyWith(prompt.includes('CANARY_PRINTS')
+      ? [{ ...finding('src/a.py', 1), confidence: 82 }, { ...finding('src/a.py', 1), confidence: 88 }, { ...finding('src/a.py', 2), confidence: 35 }]
+      : [{ ...finding('src/a.py', 1), confidence: 41 }]));
+
+    const entries = await testRules([rule('no-print', { min_confidence: 50 })], 'claude');
+
+    expect(summary(entries).map((entry) => [entry.test, entry.status])).toEqual([['logs', 'passed'], ['prints', 'passed']]);
+    expect(entries.at(-1)).toEqual({ rule: 'no-print', calibration: { neededMin: 82, forbiddenMax: 41 } });
   });
 });
 
@@ -439,11 +459,12 @@ describe('the outcome of judge test', () => {
     expect(testExitCode([entry({}), entry({ status: 'failed', reason: 'missed: expected findings, got none' })])).toBe(1);
   });
 
-  it('prints one line per test with its mode, then the counts', () => {
+  it('prints one line per test with its mode, the calibration of each rule, then the counts', () => {
     const text = formatTestResults([
       entry({}),
       entry({ test: 'old-prints', mode: 'audit', status: 'failed', reason: 'missed: expected findings, got none' }),
       entry({ test: 'typo', mode: null, status: 'failed', reason: 'invalid: unknown field `must_nt`' }),
+      { rule: 'no-print', calibration: { neededMin: 82, forbiddenMax: null } },
       entry({ rule: 'other', test: null, mode: null, status: 'skipped', reason: 'no tests' }),
     ]);
 
@@ -451,9 +472,18 @@ describe('the outcome of judge test', () => {
       '✔ no-print/prints-total (review)',
       '✘ no-print/old-prints (audit): missed: expected findings, got none',
       '✘ no-print/typo: invalid: unknown field `must_nt`',
+      'no-print: needed findings 82 or more, no forbidden finding',
       '○ other: skipped (no tests)',
       '',
       '1 passed, 2 failed, 1 skipped',
     ]);
+  });
+
+  it('ends with the cost of the runs when a test called the model', () => {
+    const run = { status: 'ok', durationMs: 1, costUsd: 0.0123, costEstimated: false, tokensEstimated: false,
+      tokens: { input: 1200, cacheCreation: 0, cacheRead: 800, output: 40 } } as const;
+
+    expect(formatTestResults([entry({ run }), entry({ test: 'other', run })]).split('\n').at(-1))
+      .toBe('Cost: $0.0246 at API prices (4.1k tokens, 40% cache reads). On a Claude subscription the real cost is lower.');
   });
 });

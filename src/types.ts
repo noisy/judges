@@ -24,7 +24,7 @@ export interface Issue {
   severity: 'low' | 'medium' | 'high';
   message: string;
   rule_id?: string;
-  confidence?: 'high' | 'medium' | 'low';
+  confidence?: number | null; // in percent, a whole number from 0 to 100; null when the judge gave none
   covered_by?: string; // `<file>:<line>` of the marker that accounts for the violation
 }
 
@@ -63,6 +63,7 @@ export interface JudgeResult {
   suppressed?: number; // how many findings markers covered: the length of `covered`
   outsideDiff?: number; // findings dropped because none of their lines is an added line of the diff
   dismissed?: number; // entries dropped because their message says the code follows the rule
+  belowThreshold?: Issue[]; // findings under the rule's `min_confidence`: not reported, never blocking
   durationMs: number;
   costUsd?: number | null; // the engine's own cost, or an estimate on a time stop; null when unknown
   costEstimated?: boolean; // costUsd is the tool's estimate from the tokens and its price table
