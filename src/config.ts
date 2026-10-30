@@ -25,6 +25,8 @@ export interface AppConfig {
   only: string[];
   stage?: string;
   root?: string;
+  formats: string[]; // report formats, paired in order with outputs
+  outputs: string[];
   command?: 'config' | 'markers';
   configAction?: 'check' | 'list' | 'show' | 'which';
   configTarget?: string;
@@ -58,7 +60,7 @@ export function stageUsageError(config: AppConfig): string | undefined {
 
 export function parseArgs(argv: string[]): AppConfig {
   const parsed = mri(argv, {
-    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules', 'only', 'root', 'base', 'stage'],
+    string: ['file', 'top', 'fail-on', 'engine', 'show', 'which', 'rules', 'only', 'root', 'base', 'stage', 'format', 'output'],
     boolean: ['json', 'help', 'version', 'short', 'full', 'staged', 'diff', 'last-commit', 'check', 'list'],
     alias: {
       f: 'file',
@@ -121,6 +123,8 @@ export function parseArgs(argv: string[]): AppConfig {
 
   const ruleDirs = [parsed.rules ?? []].flat();
   const only = [parsed.only ?? []].flat();
+  const formats = [parsed.format ?? []].flat();
+  const outputs = [parsed.output ?? []].flat();
 
   const engine = ['codex', 'gemini'].includes(parsed.engine) ? parsed.engine as SupportedEngine : 'claude';
 
@@ -144,6 +148,8 @@ export function parseArgs(argv: string[]): AppConfig {
     only,
     stage: parsed.stage === undefined ? undefined : String(parsed.stage),
     root: parsed.root,
+    formats,
+    outputs,
     command,
     configAction,
     configTarget,

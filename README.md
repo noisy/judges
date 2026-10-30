@@ -52,6 +52,7 @@ judge -f src/index.ts src/utils.ts
 - `--engine <name>`: Choose the AI engine to execute. Supported: `claude` (default) and `codex`.
 - `--json`, `-j`: Output results in exact JSON format (for agents).
 - `--stage <name>`: Run only the rules of one gate: `commit` (rules without `stage` too), `push`, or `ci` (every rule). Rules of another stage are reported as skipped. Without it, every rule runs.
+- `--format <gitlab|sarif|junit> --output <path>`: Also write the findings as a CI report (see [Reports for CI](#reports-for-ci)). Repeatable.
 - `--root <dir>`: Repository root that agent judges explore and file paths are shown relative to (default: the git root). File input only; with a diff mode it is an error.
 - `--help`, `-h`: Show the help message.
 
@@ -99,3 +100,19 @@ The `--fail-on` flag accepts:
 - `low`: Blocks on virtually any issue found.
 
 Only issues from judges that actually ran count. A judge that errors or times out (e.g. the engine CLI is missing or rate-limited) is reported with a `⚠` warning, but it never blocks the commit.
+
+### Reports for CI
+
+One run can write the findings as a GitLab Code Quality report, a SARIF log and a JUnit file, so the CI platform shows them next to the code. The n-th `--output` gets the n-th `--format`:
+
+```sh
+npx judge --staged --fail-on high \
+  --format gitlab --output gl-code-quality.json \
+  --format junit --output reports/judges-junit.xml
+```
+
+- Outputs are relative to the working directory; missing directories are created. Paths inside the reports are relative to the repository root.
+- Reports are written before the exit, also when `--fail-on` blocks. Findings suppressed by a marker are left out.
+- Severity maps `low`/`medium`/`high` to GitLab `minor`/`major`/`critical` and SARIF `note`/`warning`/`error`. JUnit has one test case per rule.
+- Each finding's fingerprint is the SHA-256 of its rule id, path and position among that rule's findings in the file, so it stays the same when code above it moves or the message is worded differently.
+- An unknown format, or a `--format` without its `--output`, exits with code 2 before any rule runs.

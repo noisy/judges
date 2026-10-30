@@ -12,6 +12,7 @@ import { findMarkersInFiles } from './markers.js';
 import { groupByRule, formatInventory } from './inventory.js';
 import { formatIssuesList, formatJudgeFailure } from './format.js';
 import { shouldBlock } from './gate.js';
+import { pairReports, reportsUsageError, writeReports } from './reports/index.js';
 import colors from 'picocolors';
 import { createRequire } from 'module';
 
@@ -34,7 +35,8 @@ async function main() {
     return;
   }
 
-  const usageError = inputUsageError(config) ?? stageUsageError(config);
+  const reportsError = config.command === undefined ? reportsUsageError(config.formats, config.outputs) : undefined;
+  const usageError = inputUsageError(config) ?? stageUsageError(config) ?? reportsError;
   if (usageError) {
     console.error(colors.red(`❌ Error: ${usageError}`));
     process.exit(USAGE_ERROR_EXIT_CODE);
@@ -105,6 +107,10 @@ async function main() {
   if (config.json) {
     console.log(JSON.stringify(results, null, 2));
   }
+
+  // Before the gate can exit, so a blocked pipeline still has its reports.
+  const root = inputContext.root ?? repoRoot();
+  writeReports(pairReports(config.formats, config.outputs), { results, root, version: pkg.version });
 
   if (shouldBlock(results, config.failOn)) {
     console.log(colors.red(`\n❌ Execution blocked: Issues of severity '${config.failOn}' or higher were found.`));
@@ -234,6 +240,8 @@ Options:
   --stage <name> Run only the rules of a gate: commit, push or ci (ci runs all; default: all)
   --root <dir> Repository root agent judges explore (default: the git root); file input only
   --base <ref> Review the branch's commits since it left <ref> (git diff <ref>...HEAD)
+  --format <gitlab|sarif|junit> --output <path>
+               Also write the findings as a CI report; repeatable, the n-th --output gets the n-th --format
   --help, -h   Show this help message
   --version, -v Show the version number
   `);
