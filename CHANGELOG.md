@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-10-30)
+
+This release catches up with the judges-bench spec. A rule can now be a directory with its own tests, and the
+judge decides what a `rule-exception` or `rule-debt` marker covers.
 
 ### Rules
 - A rule can be a directory: `<rules dir>/<id>/RULE.md`, with the directory name as its id. A directory without `RULE.md` is reported as an invalid rule. A file and a directory with the same id in one rules directory is a usage error (exit 2) that names both.
@@ -64,11 +67,3 @@ reports where the code breaks it.
 - 0: the run completed, advisory.
 - 1: `--fail-on` blocked, or a rule test failed.
 - 2: a usage error, such as an unknown flag value, a missing rules directory, nothing staged, or an unknown base ref.
-
-### Coming next
-The judges-bench spec has moved ahead of this release:
-- markers are renamed to `rule-exception` and `rule-debt`, and the model decides what a marker covers
-- a rule can be a directory (`<id>/RULE.md`) with `tests/` next to it
-- `check` and `command` are no longer rule fields
-
-These changes come in a later release.
