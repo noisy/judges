@@ -4,17 +4,19 @@ import { Issue } from './types.js';
 const SAYS_NO_VIOLATION = [
   /\bno (?:[a-z-]+ )?(?:issue|violation|problem)s?\b/i,
   /\bnot a (?:finding|violation|problem|issue)\b/i,
-  /\bcomplies\b/i,
+  /\bcompl(?:ies|iant)\b/i,
   /\bfollows the rule\b/i,
   /\bis fine\b/i,
-  /\bno change(?:s)? (?:is |are )?needed\b/i
+  /\bno changes?\b/i
 ];
 
 // Any of these means the entry still asks for a change, e.g. a real finding that also clears a nearby line.
+// A word after "no" or "not" in the same clause is not a complaint: "no comment here restates the code".
+const NOT_NEGATED = String.raw`(?<!\b(?:no|not|never)\b[^.;:,]*)`;
 const STILL_COMPLAINS = [
-  /\b(?:replace|rename|remove|delete|add|move|split|extract|use|return|raise|throw|say|tell)\b/i,
+  new RegExp(String.raw`${NOT_NEGATED}\b(?:replace|rename|remove|delete|add|move|split|extract|use|return|raise|throw|say|tell)\b`, 'i'),
   /\bshould\b(?!(?: not)? be (?:flagged|reported|disregarded|ignored))/i,
-  /\b(?:must|instead|missing|lacks?|vague|unclear|restates?|violates|breaks)\b/i,
+  new RegExp(String.raw`${NOT_NEGATED}\b(?:must|instead|missing|lacks?|vague|unclear|restates?|violates|breaks)\b`, 'i'),
   /\b(?:does|do|did)(?: not|n't)\b/i
 ];
 
