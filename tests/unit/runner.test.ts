@@ -4,7 +4,7 @@ import { getEngine, Engine, EngineStoppedError } from '../../src/engines/index.j
 import { Judge } from '../../src/judges.js';
 import { PlanItem } from '../../src/plan.js';
 import { Marker } from '../../src/markers.js';
-import { EvaluationContext, JudgeEvent } from '../../src/types.js';
+import { EvaluationContext, JudgeEvent, UNKNOWN_TOKENS } from '../../src/types.js';
 
 vi.mock('../../src/engines/index.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../src/engines/index.js')>();
@@ -132,6 +132,24 @@ describe('runPlan outcome mapping', () => {
     const [result] = await runPlan([planned()], 'claude');
 
     expect(result).toMatchObject({ status: 'ok', turns: 1, costUsd: null });
+  });
+
+  it('records unknown tokens and nothing estimated for an engine that reports no usage', async () => {
+    run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
+
+    const [result] = await runPlan([planned()], 'codex');
+
+    expect(result).toMatchObject({ tokens: UNKNOWN_TOKENS, tokensEstimated: false, costEstimated: false });
+  });
+
+  it('keeps the estimated tokens and cost of a run killed on its time limit', async () => {
+    const usage = { tokens: { input: 1200, cacheCreation: 0, cacheRead: 800, output: 4 }, tokensEstimated: true,
+      costUsd: 0.0013, costEstimated: true };
+    run.mockRejectedValue(new EngineStoppedError('claude CLI timed out after 1 seconds.', usage, 'time'));
+
+    const [result] = await runPlan([planned()], 'claude');
+
+    expect(result).toMatchObject({ status: 'stopped', ...usage });
   });
 
   it('maps a generic error to status error without issues', async () => {

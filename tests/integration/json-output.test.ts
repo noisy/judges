@@ -48,7 +48,9 @@ describe('--json output', () => {
     const run = judge('--only', 'stops');
 
     expect(run.status).toBe(STOPPED_EXIT_CODE);
-    expect(JSON.parse(run.stdout).map((result: { status: string }) => result.status)).toEqual(['stopped']);
+    const [rule, totals] = JSON.parse(run.stdout);
+    expect(rule.status).toBe('stopped');
+    expect(totals.run.costUsd).toBe(0.05);
     expect(run.stderr).toContain('Rules stopped on a limit');
   });
 
@@ -56,7 +58,7 @@ describe('--json output', () => {
     const run = judge('--fail-on', 'high');
 
     expect(run.status).toBe(1);
-    expect(JSON.parse(run.stdout)).toHaveLength(2);
+    expect(JSON.parse(run.stdout)).toHaveLength(3); // two rules and the run totals
     expect(run.stderr).toContain('Execution blocked');
   });
 });

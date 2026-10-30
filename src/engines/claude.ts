@@ -4,7 +4,8 @@ import path from 'path';
 import { EngineRequest } from './types.js';
 import { createCliEngine, EngineStoppedError, EngineUsage, OutputInterpretation } from './process.js';
 import { resolveModel } from './models.js';
-import { ExaminedTarget, StopReason } from '../types.js';
+import { usageFromStream } from './claude-stream.js';
+import { ExaminedTarget, StopReason, TokenUsage, UNKNOWN_TOKENS } from '../types.js';
 
 // Keeps the child from inheriting the developer's MCP servers, settings and sessions.
 const MINIMAL_CONFIG_ARGS = ['--strict-mcp-config', '--setting-sources', '', '--no-session-persistence'];
@@ -27,9 +28,9 @@ const SANDBOX_ARGS = [
 // (a bare `**/x` would match only under the working directory). Deny rules also cover Grep and Glob.
 export const SECRET_DENY_PATTERNS = ['**/.env*', '**/.ssh/**', '**/.aws/**', '**/.claude*/**', '**/*.pem', '**/*key*.json'];
 
-// Agent judges stream events so every tool call can be recorded; one-shot judges need only the result.
-const AGENT_OUTPUT_ARGS = ['--output-format', 'stream-json', '--verbose'];
-const ONE_SHOT_OUTPUT_ARGS = ['--output-format', 'json'];
+// Every judge streams events: an agent's tool calls are recorded from them, and partial messages let the tokens
+// of a call killed on its time limit still be counted.
+const STREAM_OUTPUT_ARGS = ['--output-format', 'stream-json', '--verbose', '--include-partial-messages'];
 
 type CliEvent = Record<string, any>;
 
@@ -37,9 +38,8 @@ type CliEvent = Record<string, any>;
 const STOP_REASON_OF_SUBTYPE: Record<string, StopReason> = { error_max_turns: 'turns', error_max_budget_usd: 'cost' };
 
 export function buildClaudeArgs(req: EngineRequest): string[] {
-  const outputArgs = req.mode === 'agent' ? AGENT_OUTPUT_ARGS : ONE_SHOT_OUTPUT_ARGS;
   const args = [
-    '-p', req.prompt, ...outputArgs, '--tools', req.tools.join(','), ...MINIMAL_CONFIG_ARGS, ...SANDBOX_ARGS,
+    '-p', req.prompt, ...STREAM_OUTPUT_ARGS, '--tools', req.tools.join(','), ...MINIMAL_CONFIG_ARGS, ...SANDBOX_ARGS,
     ...readAccessArgs(req.allowRead, req.cwd ?? process.cwd())
   ];
   const model = resolveModel('claude', req.model);
@@ -105,12 +105,13 @@ export function reportedClaudeUsage(stdout: string, req: EngineRequest): EngineU
   return envelope ? usageOf(events, envelope, req) : {};
 }
 
-// A run killed on its time limit never printed its totals, so an agent's turns and tool calls are read from
-// the stream it printed so far, and the cost stays unknown.
+// A run killed on its time limit never printed its totals, so its tokens, and an agent's turns and tool calls,
+// are read from the stream it printed so far, and its cost is estimated.
 export function claudeUsageBeforeKill(stdout: string, req: EngineRequest): EngineUsage {
-  if (req.mode !== 'agent') return {};
   const events = parseEvents(stdout);
-  return { turns: countTurns(events), examined: examinedTargets(events, {}, req.cwd) };
+  const usage = usageFromStream(events);
+  if (req.mode !== 'agent') return usage;
+  return { ...usage, turns: countTurns(events), examined: examinedTargets(events, {}, req.cwd) };
 }
 
 export function claudeStopReason(stdout: string): StopReason | undefined {
@@ -146,11 +147,25 @@ function parseObject(text: string): CliEvent | undefined {
   }
 }
 
-// Cost and turns as the CLI reported them, and for an agent judge every tool call it made.
+// Cost, tokens and turns as the CLI reported them, and for an agent judge every tool call it made.
 function usageOf(events: CliEvent[], envelope: CliEvent, req: EngineRequest): EngineUsage {
-  const usage: EngineUsage = { costUsd: asNumber(envelope.total_cost_usd), turns: asNumber(envelope.num_turns) };
+  const usage: EngineUsage = {
+    costUsd: asNumber(envelope.total_cost_usd), tokens: tokensOf(envelope.usage), turns: asNumber(envelope.num_turns)
+  };
   if (req.mode === 'agent') usage.examined = examinedTargets(events, envelope, req.cwd);
   return usage;
+}
+
+// The CLI's `usage` sums every message of the call; a part it leaves out was not used.
+function tokensOf(usage: unknown): TokenUsage {
+  if (usage === null || typeof usage !== 'object') return UNKNOWN_TOKENS;
+  const { input_tokens, cache_creation_input_tokens, cache_read_input_tokens, output_tokens } = usage as CliEvent;
+  return {
+    input: asNumber(input_tokens) ?? 0,
+    cacheCreation: asNumber(cache_creation_input_tokens) ?? 0,
+    cacheRead: asNumber(cache_read_input_tokens) ?? 0,
+    output: asNumber(output_tokens) ?? 0
+  };
 }
 
 // The CLI may print one message as several events, one per content block, all with the message's id.

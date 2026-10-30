@@ -7,7 +7,7 @@ import { buildCodexArgs, codexEngine } from '../../src/engines/codex.js';
 import { buildGeminiArgs, geminiEngine } from '../../src/engines/gemini.js';
 import { resolveModel } from '../../src/engines/models.js';
 import { EngineRequest } from '../../src/engines/types.js';
-import { SupportedEngine } from '../../src/types.js';
+import { SupportedEngine, UNKNOWN_TOKENS } from '../../src/types.js';
 
 const baseRequest: EngineRequest = { prompt: 'review this', mode: 'one-shot', timeoutMs: 30000, tools: [], allowRead: [] };
 const agentRequest: EngineRequest = { ...baseRequest, mode: 'agent', tools: ['Read', 'Grep', 'Glob'], cwd: '/repo' };
@@ -40,7 +40,8 @@ describe('buildClaudeArgs', () => {
     const args = buildClaudeArgs(baseRequest);
 
     expect(args.slice(0, 2)).toEqual(['-p', 'review this']);
-    expect(flagValue(args, '--output-format')).toBe('json');
+    expect(flagValue(args, '--output-format')).toBe('stream-json');
+    expect(args).toEqual(expect.arrayContaining(['--verbose', '--include-partial-messages']));
     expect(flagValue(args, '--tools')).toBe('');
     expect(flagValue(args, '--setting-sources')).toBe('');
     expect(args).toContain('--strict-mcp-config');
@@ -143,16 +144,21 @@ describe('buildCodexArgs and buildGeminiArgs', () => {
 });
 
 describe('interpretClaudeOutput', () => {
-  it('extracts result text, cost and turns from the JSON envelope', () => {
-    const stdout = JSON.stringify({ type: 'result', is_error: false, result: '[]', total_cost_usd: 0.0123, num_turns: 1 });
+  it('extracts result text, cost, tokens and turns from the JSON envelope', () => {
+    const usage = { input_tokens: 1200, cache_read_input_tokens: 800, output_tokens: 40 };
+    const stdout = JSON.stringify({ type: 'result', is_error: false, result: '[]', total_cost_usd: 0.0123, num_turns: 1, usage });
 
-    expect(interpretClaudeOutput(stdout, baseRequest)).toEqual({ rawOutput: '[]', costUsd: 0.0123, turns: 1 });
+    expect(interpretClaudeOutput(stdout, baseRequest)).toEqual({
+      rawOutput: '[]', costUsd: 0.0123, turns: 1, tokens: { input: 1200, cacheCreation: 0, cacheRead: 800, output: 40 }
+    });
   });
 
-  it('leaves cost and turns undefined when the envelope lacks them', () => {
+  it('leaves cost, tokens and turns unknown when the envelope lacks them', () => {
     const stdout = JSON.stringify({ type: 'result', result: '[]' });
 
-    expect(interpretClaudeOutput(stdout, baseRequest)).toEqual({ rawOutput: '[]', costUsd: undefined, turns: undefined });
+    expect(interpretClaudeOutput(stdout, baseRequest)).toEqual({
+      rawOutput: '[]', costUsd: undefined, turns: undefined, tokens: UNKNOWN_TOKENS
+    });
   });
 
   it('falls back to the plain stdout when it is not a JSON envelope', () => {
@@ -172,11 +178,12 @@ describe('interpretClaudeOutput', () => {
     expect(() => interpretClaudeOutput(stdout, { ...baseRequest, maxBudgetUsd: 0.1 })).toThrow('claude CLI stopped: budget exceeded ($0.1)');
   });
 
-  it('keeps the cost and turns of a run stopped by its budget', () => {
-    const stdout = JSON.stringify({ type: 'result', subtype: 'error_max_budget_usd', is_error: true, total_cost_usd: 0.011, num_turns: 1 });
+  it('keeps the cost, tokens and turns of a run stopped by its budget, cache writes apart', () => {
+    const usage = { input_tokens: 1200, cache_creation_input_tokens: 300, output_tokens: 40 };
+    const stdout = JSON.stringify({ type: 'result', subtype: 'error_max_budget_usd', is_error: true, total_cost_usd: 0.011, num_turns: 1, usage });
 
     expect(stoppedUsage(() => interpretClaudeOutput(stdout, { ...baseRequest, maxBudgetUsd: 0.01 })))
-      .toEqual({ costUsd: 0.011, turns: 1 });
+      .toEqual({ costUsd: 0.011, turns: 1, tokens: { input: 1200, cacheCreation: 300, cacheRead: 0, output: 40 } });
   });
 });
 
@@ -215,7 +222,7 @@ describe('claudeUsageBeforeKill', () => {
   it('counts the turns and tool calls an agent streamed before the kill, and leaves the cost unknown', () => {
     const stdout = stream(toolUse('t1', 'Glob', { pattern: 'tests/**/*.py' }), toolUse('t2', 'Read', { file_path: '/repo/a.py' }));
 
-    expect(claudeUsageBeforeKill(stdout, agentRequest)).toEqual({
+    expect(claudeUsageBeforeKill(stdout, agentRequest)).toMatchObject({
       turns: 2,
       examined: [{ tool: 'Glob', target: 'tests/**/*.py' }, { tool: 'Read', target: 'a.py' }]
     });
@@ -228,8 +235,8 @@ describe('claudeUsageBeforeKill', () => {
   });
 
   it('counts no turns for an agent killed before it printed anything, and leaves one-shot runs to the caller', () => {
-    expect(claudeUsageBeforeKill('', agentRequest)).toEqual({ turns: 0, examined: [] });
-    expect(claudeUsageBeforeKill('', baseRequest)).toEqual({});
+    expect(claudeUsageBeforeKill('', agentRequest)).toMatchObject({ turns: 0, examined: [] });
+    expect(claudeUsageBeforeKill('', baseRequest)).not.toHaveProperty('turns');
   });
 });
 
@@ -289,6 +296,7 @@ describe('interpretClaudeOutput for agent streams', () => {
     expect(interpretClaudeOutput(stdout, agentRequest)).toEqual({
       rawOutput: '[]',
       costUsd: 0.02,
+      tokens: UNKNOWN_TOKENS,
       turns: 5,
       examined: [
         { tool: 'Glob', target: 'tests/**/*.py' },
@@ -336,7 +344,7 @@ describe('interpretClaudeOutput for agent streams', () => {
   it('keeps the cost, turns and tool calls of a run stopped by its turn cap, whatever the exit code', () => {
     const stdout = stream(toolUse('t1', 'Read', { file_path: '/repo/tests/test_greet.py' }),
       JSON.stringify({ type: 'result', subtype: 'error_max_turns', is_error: true, total_cost_usd: 0.034, num_turns: 2 }));
-    const usage = { costUsd: 0.034, turns: 2, examined: [{ tool: 'Read', target: 'tests/test_greet.py' }] };
+    const usage = { costUsd: 0.034, tokens: UNKNOWN_TOKENS, turns: 2, examined: [{ tool: 'Read', target: 'tests/test_greet.py' }] };
 
     expect(stoppedUsage(() => interpretClaudeOutput(stdout, { ...agentRequest, maxTurns: 2 }))).toEqual(usage);
     expect(reportedClaudeUsage(stdout, { ...agentRequest, maxTurns: 2 })).toEqual(usage);

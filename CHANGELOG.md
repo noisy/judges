@@ -7,6 +7,10 @@
 - New flag `--on-stop warn | fail | ignore`: `warn` (default) as above, `fail` exits `1` on a stopped rule with or without `--fail-on`, `ignore` keeps the exit code of 0.4.0. An unknown value is a usage error (exit `2`) before any rule runs. `judge test` has no `--on-stop` and no exit `3`.
 
 ### Output
+- `--json` ends with one more entry after the rule records: `{ "run": { tokens, tokensEstimated, costUsd, costEstimated } }`, the totals of the run. It has no `judgeId`; a script that counts the entries counts one more.
+- Each rule record has `tokens: { input, cacheCreation, cacheRead, output }`, `tokensEstimated` and `costEstimated`. On a time stop the tokens are counted from the stream before the kill and the cost is estimated from a price table shipped in judges (OpenRouter list prices of 2026-10-30), instead of `null`. A model without a price gives `costUsd: null`. codex and gemini give `null` tokens.
+- The human report ends with the cost of the run at API prices, e.g. `Cost: $0.0246 at API prices (4.1k tokens, 40% cache reads). On a Claude subscription the real cost is lower.`
+- claude now runs every rule with `--output-format stream-json --verbose --include-partial-messages`; one-shot rules used `--output-format json`.
 - With `--json`, stdout holds only the JSON report, so `judge --json | jq` works. The closing status lines (`Execution blocked ...`, the stopped warning, `No judges found ...`) go to stderr. Without `--json` they stay on stdout, after the report.
 
 ## 0.4.0 (2026-10-30)

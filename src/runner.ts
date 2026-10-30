@@ -8,11 +8,11 @@ import { dropOutsideDiff } from './diff-lines.js';
 import { dropNonFindings } from './non-findings.js';
 import { SEVERITY_SCORE } from './config.js';
 import { repoRoot } from './files.js';
-import { EvaluationContext, Issue, JudgeEvent, JudgeResult, SupportedEngine } from './types.js';
+import { EvaluationContext, Issue, JudgeEvent, JudgeResult, SupportedEngine, UNKNOWN_TOKENS } from './types.js';
 
 type JudgeOutcome = Pick<JudgeResult,
-  'status' | 'stopReason' | 'issues' | 'covered' | 'suppressed' | 'outsideDiff' | 'dismissed' | 'error' | 'costUsd' | 'turns'
-  | 'examined'>;
+  'status' | 'stopReason' | 'issues' | 'covered' | 'suppressed' | 'outsideDiff' | 'dismissed' | 'error' | 'costUsd'
+  | 'costEstimated' | 'tokens' | 'tokensEstimated' | 'turns' | 'examined'>;
 // A one-shot call is one turn, also when the engine does not say so or was killed before its answer.
 const ONE_SHOT_TURNS = 1;
 export type ProgressListener = (event: JudgeEvent) => void;
@@ -69,6 +69,9 @@ async function runJudge(
     dismissed: outcome.dismissed,
     durationMs: Date.now() - startedAt,
     costUsd: outcome.costUsd ?? null,
+    costEstimated: outcome.costEstimated ?? false,
+    tokens: outcome.tokens ?? UNKNOWN_TOKENS,
+    tokensEstimated: outcome.tokensEstimated ?? false,
     turns: turnsOf(judge, outcome),
     inline: context.files.map((file) => file.path),
     examined: outcome.examined,
@@ -95,14 +98,14 @@ async function evaluateJudge(
 ): Promise<JudgeOutcome> {
   try {
     const prompt = constructPrompt(judge, context, markers);
-    const response = await getEngine(engine).run(buildEngineRequest(judge, prompt, context.root ?? repoRoot()));
+    const { rawOutput, durationMs: _, ...usage } = await getEngine(engine).run(
+      buildEngineRequest(judge, prompt, context.root ?? repoRoot()));
     // Covered first: the judge may word a covered violation as accepted, and it may sit on an old line.
-    const { covered, kept } = splitCovered(parseLLMOutput(response.rawOutput), markers);
+    const { covered, kept } = splitCovered(parseLLMOutput(rawOutput), markers);
     const { kept: violations, dismissed } = dropNonFindings(kept);
     const { kept: inChange, outsideDiff } = dropOldFindings(judge, attributeToRule(judge, violations), context);
     return { status: 'ok', issues: sortBySeverity(inChange), covered: attributeToRule(judge, covered),
-      suppressed: covered.length, outsideDiff, dismissed, costUsd: response.costUsd, turns: response.turns,
-      examined: response.examined };
+      suppressed: covered.length, outsideDiff, dismissed, ...usage };
   } catch (error: any) {
     if (!(error instanceof EngineStoppedError)) return { status: 'error', issues: [], error: error.message };
     // A stopped rule reports none of its findings: its answer was cut off, and a partial list looks like a full one.

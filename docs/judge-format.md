@@ -106,7 +106,7 @@ Intent: every connector has an integration test.
 - **Known limitation: the repository's `CLAUDE.md`.** Agent judges run in the repository root, so the CLI auto-loads that repository's own `CLAUDE.md`, which can influence the judge. `--bare` would stop it, but it also turns off OAuth and keychain login, so it is not used.
 - **Committed content.** The files in the prompt are what is being committed (the staged content in `--staged` mode). The judge is told the files on disk may differ.
 - **Line numbers.** In both modes file contents are shown as `  17| code` and the judge reports those numbers.
-- **Run record.** The result lists the files given in the prompt as `inline: [paths]` (every judge), and every tool call as `examined: [{ tool, target, denied? }]`. The summary line shows counts, e.g. `(read 2 files, 4 searches)`; `--json` has the full list.
+- **Run record.** The result lists the files given in the prompt as `inline: [paths]` (every judge), and every tool call as `examined: [{ tool, target, denied? }]`. The summary line shows counts, e.g. `(read 2 files, 4 searches)`; `--json` has the full list. Every judge also records `tokens` and `costUsd`; see [JSON output and cost](../README.md#json-output-and-cost).
 
 ### Stopped by a limit
 
@@ -120,7 +120,7 @@ A rule that hits one of its limits did not finish. It gets status `stopped` and 
 
 - **No findings.** The answer was cut off, so a partial list would look like a full check. A stopped rule never blocks `--fail-on`.
 - **Exit code.** `--on-stop` decides: `warn` (default) exits `3` when a rule stopped and nothing blocked, `fail` exits `1`, `ignore` leaves the exit code alone. A block on findings wins over `3`. An unknown value is a usage error (exit `2`). See [Exit codes](../README.md#exit-codes).
-- **What it used.** The `--json` record keeps `turns`, `costUsd` and `durationMs` up to the stop. On a time stop the engine never says its totals: an agent's turns are counted from the stream before the kill, a one-shot rule counts as 1 turn, and `costUsd` is `null`.
+- **What it used.** The `--json` record keeps `turns`, `tokens`, `costUsd` and `durationMs` up to the stop. On a time stop the engine never says its totals, so judges reads them from the stream it got before the kill: an agent's turns are counted (a one-shot rule counts as 1 turn), each message's input tokens are exact, the output of the message that was cut off is counted as 4 characters a token (`tokensEstimated: true`), and `costUsd` is estimated from the price table (`costEstimated: true`), or `null` for a model the table does not know.
 - **Report.** The summary line says `⚠ <rule>: stopped (<stopReason>)` and the limit, e.g. `stopped (turns) after 8 turns`. With `--on-stop warn`, the run ends with a warning that names the stopped rules. `error` holds the engine's message. JUnit reports a stopped rule as an `<error>`.
 - **`error` is for real errors.** A bad rule, a crashed engine or an answer that cannot be read is `error`, never `stopped`.
 
@@ -302,7 +302,7 @@ Without `--json`, one line per test: `✔ <rule>/<test> (review)`, `✘ <rule>/<
 ]
 ```
 
-`status` is `passed`, `failed` or `skipped`, `reason` is null for a passed test, and `findings` have paths relative to the test's repository. `run` holds the fields of a review result (`status`, `stopReason`, `durationMs`, `costUsd`, `turns`, `inline`, `examined`, `error`, `skipReason`, ...); it is null when the rule was never started: a rule without tests, or an invalid test.
+`status` is `passed`, `failed` or `skipped`, `reason` is null for a passed test, and `findings` have paths relative to the test's repository. `run` holds the fields of a review result (`status`, `stopReason`, `durationMs`, `costUsd`, `tokens`, `turns`, `inline`, `examined`, `error`, `skipReason`, ...); it is null when the rule was never started: a rule without tests, or an invalid test.
 
 ### A review never reviews tests
 
