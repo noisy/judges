@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Markers
+- New names: `rule-exception: <id> -- <reason>` and `rule-debt: <id> -- <reason>`. `rule-ignore` and `rule-todo` are still read as aliases.
+- The judge decides what a marker covers. The prompt lists each marker at its own line with its whole reason, and the judge returns a violation a marker accounts for with `covered_by`. `--json` lists those findings in the rule's new `covered` array and counts them in `suppressed`. A `covered_by` that names no marker from the prompt covers nothing. The line-level and file-level coverage rules are gone.
+- A reason may go on over several comment lines. Markers inside docstrings and block comments, and on ` * ` lines, are read. `judge markers` shows them too.
+
 ## 0.2.0 (2026-10-30)
 
 The first release with rules. A rule is one Markdown file: settings in the frontmatter, the rule text in the body.

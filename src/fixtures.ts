@@ -29,7 +29,7 @@ const FIXTURES_SUFFIX = '.fixtures';
 const FIXTURE_NAME = /^(violation|pass)(-.+)?$/;
 // The comment syntax of markers (markers.ts), with its own keyword so the marker audit never sees it.
 const EXPECT_LINE = /^\s*(?:#|\/\/|--|\/\*+|<!--|;+)\s*rule-expect:\s*([A-Za-z0-9][\w.-]*)/;
-const ANY_MARKER_LINE = /^\s*(?:#|\/\/|--|\/\*+|<!--|;+)\s*rule-(?:expect|ignore|todo):/;
+const ANY_MARKER_LINE = /^\s*(?:#|\/\/|--|\/\*+|<!--|;+)\s*rule-(?:expect|exception|debt|ignore|todo):/;
 const PASSED: Verdict = { result: 'passed' };
 
 export function fixturesDir(judge: Judge): string {
@@ -51,7 +51,7 @@ export function expectFromName(name: string): FixtureExpect | undefined {
 }
 
 // Every rule-expect line becomes empty, so the rule never sees one and the other lines keep their numbers.
-// Like a line marker, an expectation covers the next line that is neither blank nor another marker.
+// An expectation points at the next line that is neither blank nor another marker.
 export function blankExpectLines(file: string, content: string, ruleId: string): { content: string; expected: ExpectedLine[] } {
   const lines = content.split('\n');
   const expected = lines.flatMap((line, index) =>

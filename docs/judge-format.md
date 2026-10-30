@@ -44,7 +44,7 @@ Evaluate the code for Single Responsibility Principle (SRP) violations.
 
 ## Rule Files
 
-Deviations from a rule are marked in the code with `rule-ignore` / `rule-todo` markers; see [markers.md](markers.md).
+Exceptions to a rule and known debt are marked in the code with `rule-exception` / `rule-debt` markers; see [markers.md](markers.md).
 
 A rule is a flat Markdown file `<dir>/<id>.md`, loaded from every directory passed with `--rules <dir>` (repeatable). Rules override `JUDGE.md` judges with the same id. The body holds the instructions: an `Intent` in one sentence, then the rule.
 
@@ -110,7 +110,7 @@ Intent: every connector has an integration test.
 - **Working directory.** The repository root: the git root, or `--root <dir>` (file input only). File paths are shown relative to it. One-shot judges run in a temp dir, so no repository `CLAUDE.md` reaches them.
 - **Known limitation: the repository's `CLAUDE.md`.** Agent judges run in the repository root, so the CLI auto-loads that repository's own `CLAUDE.md`, which can influence the judge. `--bare` would stop it, but it also turns off OAuth and keychain login, so it is not used.
 - **Committed content.** The files in the prompt are what is being committed (the staged content in `--staged` mode). The judge is told the files on disk may differ.
-- **Line numbers.** In both modes file contents are shown as `  17| code` and the judge reports those numbers, so findings land on the lines markers cover.
+- **Line numbers.** In both modes file contents are shown as `  17| code` and the judge reports those numbers.
 - **Run record.** The result lists the files given in the prompt as `inline: [paths]` (every judge), and every tool call as `examined: [{ tool, target, denied? }]`. The summary line shows counts, e.g. `(read 2 files, 4 searches)`; `--json` has the full list.
 
 ### Sandbox
@@ -180,7 +180,7 @@ rules/
     pass/src/config.py
 ```
 
-A violation fixture may mark the lines it expects findings on, with the comment syntax of [markers](markers.md). Like a line marker, it covers the next line that is neither blank nor another marker:
+A violation fixture may mark the lines it expects findings on, with the comment syntax of [markers](markers.md). It points at the next line that is neither blank nor another marker:
 
 ```python
 def load_port(value):

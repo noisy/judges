@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { constructPrompt, numberLines } from '../../src/prompt.js';
 import { parseLLMOutput } from '../../src/llm.js';
 import { Judge } from '../../src/judges.js';
+import { Marker } from '../../src/markers.js';
 import { EvaluationContext } from '../../src/types.js';
 
 const oneShot = { id: 'r', name: 'r', context: 'file', mode: 'one-shot', instructions: 'Intent: be good.' } as Judge;
@@ -50,10 +51,10 @@ describe('constructPrompt', () => {
   });
 
   it('gives an agent the rule, the files, the diff and markers, then asks it to verify against the repository', () => {
-    const markers = [{ ruleId: 'r', kind: 'todo', reason: 'debt', file: 'src/connectors/beta.py', scope: 'file' }] as any;
+    const markers: Marker[] = [{ ruleId: 'r', kind: 'debt', reason: 'debt', file: 'src/connectors/beta.py', markerLine: 1 }];
     const prompt = constructPrompt(agent, diffContext, markers);
 
-    const order = ['Intent: be good.', '## src/connectors/beta.py', '# Diff', 'src/connectors/beta.py (whole file)',
+    const order = ['Intent: be good.', '## src/connectors/beta.py', '# Diff', '- src/connectors/beta.py:1 (rule-debt): debt',
       'Verify the rule against the repository.'].map((text) => prompt.indexOf(text));
     expect(order.every((position) => position >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -77,6 +78,23 @@ describe('constructPrompt', () => {
     const prompt = constructPrompt(oneShot, diffContext);
     expect(prompt).toContain('# Diff');
     expect(prompt).toContain('4|     return requests.get(URL)');
+  });
+
+  it('lists each marker at its own line with its reason, and asks for covered_by', () => {
+    const markers: Marker[] = [
+      { ruleId: 'r', kind: 'exception', reason: 'the CLI prints its result', file: 'src/cli.py', markerLine: 2 },
+      { ruleId: 'r', kind: 'debt', reason: 'move to logging later', file: 'src/export.py', markerLine: 11 }
+    ];
+    const prompt = constructPrompt(oneShot, filesContext, markers);
+
+    expect(prompt).toContain('- src/cli.py:2 (rule-exception): the CLI prints its result');
+    expect(prompt).toContain('- src/export.py:11 (rule-debt): move to logging later');
+    expect(prompt).toContain('"covered_by"');
+    expect(prompt).toContain('even right next to a marker');
+  });
+
+  it('leaves the prompt as it was when the rule has no markers', () => {
+    expect(constructPrompt(oneShot, filesContext)).not.toContain('covered_by');
   });
 
   it('leaves parsing of the model answer unaffected by the numbered listing', () => {

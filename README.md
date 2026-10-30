@@ -10,7 +10,7 @@
 - **JSON Output**: Fully parsable output (`--json`) built for AI Agents (like Claude Code) to use in their workflows.
 - **Git Hook Ready**: Easy to drop into Husky for automated pre-commit code reviews.
 - **Pluggable Judges**: Easy YAML + Markdown definitions (`JUDGE.md`) to add custom rules for your specific team or project.
-- **Markers**: `rule-ignore` / `rule-todo` comments with a reason mark deliberate deviations and known debt; `judge markers` lists them all. See [docs/markers.md](docs/markers.md).
+- **Markers**: `rule-exception` / `rule-debt` comments with a reason mark deliberate exceptions and known debt; the judge decides what each one covers and lists the findings it covered. `judge markers` lists them all. See [docs/markers.md](docs/markers.md).
 - **Rule fixtures**: a known violation and a known pass next to each rule; `judge test` checks the rule still catches the first and stays quiet on the second. See [docs/judge-format.md](docs/judge-format.md#testing-rules-with-fixtures).
 
 ---

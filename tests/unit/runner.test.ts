@@ -131,24 +131,50 @@ describe('runPlan outcome mapping', () => {
 });
 
 describe('runPlan with markers', () => {
-  const marker: Marker = { kind: 'ignore', ruleId: 'srp', reason: 'external schema', file: 'a.ts', markerLine: 1, scope: { line: 2 } };
+  const marker: Marker = { kind: 'exception', ruleId: 'srp', reason: 'external schema', file: 'a.ts', markerLine: 1 };
 
   beforeEach(() => {
     run.mockReset();
     vi.mocked(getEngine).mockReturnValue({ name: 'claude', isAvailable: () => true, run });
   });
 
-  it('drops findings on marked lines and counts them as suppressed', async () => {
+  it('drops the findings the judge gives to a marker, and lists and counts them as covered', async () => {
     const issues = [
-      { file: 'a.ts', line: 2, severity: 'high', message: 'marked' },
-      { file: 'a.ts', line: 3, severity: 'low', message: 'not marked' }
+      { file: 'a.ts', line: 9, severity: 'high', message: 'covered far below', covered_by: './a.ts:1' },
+      { file: 'a.ts', line: 2, severity: 'low', message: 'right below, not covered' }
     ];
     run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
 
     const [result] = await runPlan([planned([marker])], 'claude');
 
-    expect(result.issues.map((i) => i.message)).toEqual(['not marked']);
+    expect(result.issues.map((i) => i.message)).toEqual(['right below, not covered']);
+    expect(result.covered).toEqual([{ file: 'a.ts', line: 9, severity: 'high', message: 'covered far below', covered_by: 'a.ts:1' }]);
     expect(result.suppressed).toBe(1);
+  });
+
+  it('reports a finding whose covered_by names no marker of the prompt, without the covered_by', async () => {
+    const issues = [
+      { file: 'a.ts', line: 3, severity: 'low', message: 'points at a line with no marker', covered_by: 'a.ts:2' },
+      { file: 'a.ts', line: 4, severity: 'low', message: 'points at nothing', covered_by: 'the marker above' }
+    ];
+    run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
+
+    const [result] = await runPlan([planned([marker])], 'claude');
+
+    expect(result.issues).toHaveLength(2);
+    expect(result.issues.every((issue) => !('covered_by' in issue))).toBe(true);
+    expect(result.covered).toEqual([]);
+    expect(result.suppressed).toBe(0);
+  });
+
+  it('keeps a covered finding the judge words as accepted, instead of dismissing it', async () => {
+    const issues = [{ file: 'a.ts', line: 2, severity: 'low', message: 'Accepted by the marker, no issue here.', covered_by: 'a.ts:1' }];
+    run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
+
+    const [result] = await runPlan([planned([marker])], 'claude');
+
+    expect(result.covered).toHaveLength(1);
+    expect(result.dismissed).toBe(0);
   });
 
   it('drops entries that say the code follows the rule and counts them as dismissed', async () => {
@@ -172,14 +198,14 @@ describe('runPlan with markers', () => {
     expect(result.suppressed).toBe(0);
   });
 
-  it('tells the judge which places are accounted for', async () => {
+  it('tells the judge about its markers, at their own lines', async () => {
     run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
 
     await runPlan([planned([marker])], 'claude');
 
     const prompt = run.mock.calls[0][0].prompt;
-    expect(prompt).toContain('Markers (accounted for, do not report');
-    expect(prompt).toContain('- a.ts:2 (rule-ignore): external schema');
+    expect(prompt).toContain('- a.ts:1 (rule-exception): external schema');
+    expect(prompt).toContain('"covered_by"');
   });
 });
 
@@ -211,8 +237,9 @@ describe('runPlan on a diff', () => {
   });
 
   it('counts a finding once, as suppressed, when a marker covers it outside the diff', async () => {
-    const marker: Marker = { kind: 'todo', ruleId: 'srp', reason: 'known', file: 'a.ts', markerLine: 1, scope: { line: 1 } };
-    run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
+    const marker: Marker = { kind: 'debt', ruleId: 'srp', reason: 'known', file: 'a.ts', markerLine: 2 };
+    const answer = [{ ...issues[0], covered_by: 'a.ts:2' }, issues[1]];
+    run.mockResolvedValue({ rawOutput: JSON.stringify(answer), durationMs: 5 });
 
     const [result] = await runPlan([{ judge, context: diffContext, markers: [marker] }], 'claude');
 

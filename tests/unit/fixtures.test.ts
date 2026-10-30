@@ -47,7 +47,7 @@ describe('blankExpectLines', () => {
   });
 
   it('expects the next line that is neither blank nor another marker', () => {
-    const content = '// rule-expect: no-print\n\n// rule-ignore: other -- reason\nconsole.log(x)';
+    const content = '// rule-expect: no-print\n\n// rule-exception: other -- reason\nconsole.log(x)';
 
     expect(blankExpectLines('a.js', content, 'no-print').expected).toEqual([{ file: 'a.js', line: 4 }]);
   });

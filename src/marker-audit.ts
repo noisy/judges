@@ -21,7 +21,7 @@ export function auditMarkers(context: EvaluationContext, knownRuleIds: string[])
 function markerFindings(marker: Marker, known: Set<string>): Issue[] {
   const findings: Issue[] = [];
   if (!hasReason(marker)) {
-    findings.push(finding(marker, 'medium', `rule-${marker.kind} for ${marker.ruleId} has no reason; add "-- <reason>"`));
+    findings.push(finding(marker, 'medium', `rule-${marker.kind} for ${marker.ruleId} has no reason, so it covers nothing; add "-- <reason>"`));
   }
   if (!known.has(marker.ruleId)) {
     findings.push(finding(marker, 'low', `marker refers to unknown rule ${marker.ruleId}`));

@@ -3,7 +3,7 @@ import { parseLLMOutput } from './llm.js';
 import { constructPrompt } from './prompt.js';
 import { Judge, displayName } from './judges.js';
 import { PlanItem } from './plan.js';
-import { Marker, isCovered } from './markers.js';
+import { Marker, markerPlace, namedMarker } from './markers.js';
 import { dropOutsideDiff } from './diff-lines.js';
 import { dropNonFindings } from './non-findings.js';
 import { SEVERITY_SCORE } from './config.js';
@@ -11,7 +11,7 @@ import { repoRoot } from './files.js';
 import { EvaluationContext, Issue, JudgeEvent, JudgeResult, SupportedEngine } from './types.js';
 
 type JudgeOutcome = Pick<JudgeResult,
-  'status' | 'issues' | 'suppressed' | 'outsideDiff' | 'dismissed' | 'error' | 'costUsd' | 'turns' | 'examined'>;
+  'status' | 'issues' | 'covered' | 'suppressed' | 'outsideDiff' | 'dismissed' | 'error' | 'costUsd' | 'turns' | 'examined'>;
 export type ProgressListener = (event: JudgeEvent) => void;
 
 export async function runPlan(
@@ -58,6 +58,7 @@ async function runJudge(
     ...judgeIdentity(judge),
     status: outcome.status,
     issues: outcome.issues,
+    covered: outcome.covered,
     suppressed: outcome.suppressed,
     outsideDiff: outcome.outsideDiff,
     dismissed: outcome.dismissed,
@@ -83,12 +84,13 @@ async function evaluateJudge(
   try {
     const prompt = constructPrompt(judge, context, markers);
     const response = await getEngine(engine).run(buildEngineRequest(judge, prompt, context.root ?? repoRoot()));
-    const { kept: violations, dismissed } = dropNonFindings(parseLLMOutput(response.rawOutput));
-    const issues = attributeToRule(judge, violations);
-    const { kept, suppressed } = dropCovered(judge, issues, markers);
-    const { kept: inChange, outsideDiff } = dropOldFindings(judge, kept, context);
-    return { status: 'ok', issues: sortBySeverity(inChange), suppressed, outsideDiff, dismissed, costUsd: response.costUsd,
-      turns: response.turns, examined: response.examined };
+    // Covered first: the judge may word a covered violation as accepted, and it may sit on an old line.
+    const { covered, kept } = splitCovered(parseLLMOutput(response.rawOutput), markers);
+    const { kept: violations, dismissed } = dropNonFindings(kept);
+    const { kept: inChange, outsideDiff } = dropOldFindings(judge, attributeToRule(judge, violations), context);
+    return { status: 'ok', issues: sortBySeverity(inChange), covered: attributeToRule(judge, covered),
+      suppressed: covered.length, outsideDiff, dismissed, costUsd: response.costUsd, turns: response.turns,
+      examined: response.examined };
   } catch (error: any) {
     const status = error instanceof TimeoutError ? 'timeout' : 'error';
     const usage = error instanceof EngineStoppedError ? error.usage : {};
@@ -116,10 +118,17 @@ export function attributeToRule(judge: Judge, issues: Issue[]): Issue[] {
   return issues.map((issue) => ({ ...issue, rule_id: judge.id, severity: judge.severity }));
 }
 
-// The prompt asks the judge to skip marked places; this is the guarantee when it does not.
-export function dropCovered(judge: Judge, issues: Issue[], markers: Marker[]): { kept: Issue[]; suppressed: number } {
-  const kept = issues.filter((issue) => !isCovered(markers, judge.id, issue.file, issue.line));
-  return { kept, suppressed: issues.length - kept.length };
+// The judge says which marker covers a violation. Only the markers in its prompt can: any other `covered_by`
+// covers nothing, and the finding is reported without it.
+export function splitCovered(issues: Issue[], markers: Marker[]): { covered: Issue[]; kept: Issue[] } {
+  const covered: Issue[] = [];
+  const kept: Issue[] = [];
+  for (const { covered_by, ...issue } of issues) {
+    const marker = namedMarker(markers, covered_by);
+    if (marker) covered.push({ ...issue, covered_by: markerPlace(marker) });
+    else kept.push(issue);
+  }
+  return { covered, kept };
 }
 
 // On a diff, only what the change added is reported. Agent judges are left alone: they may rightly report

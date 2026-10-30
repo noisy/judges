@@ -25,6 +25,7 @@ export interface Issue {
   message: string;
   rule_id?: string;
   confidence?: 'high' | 'medium' | 'low';
+  covered_by?: string; // `<file>:<line>` of the marker that accounts for the violation
 }
 
 // One tool call an agent judge made: what it read, searched or listed.
@@ -42,7 +43,8 @@ export interface JudgeResult {
   file: string;
   status: JudgeStatus;
   issues: Issue[];
-  suppressed?: number; // findings dropped because a marker covers them
+  covered?: Issue[]; // findings a marker covers, each with its `covered_by`; not reported
+  suppressed?: number; // how many findings markers covered: the length of `covered`
   outsideDiff?: number; // findings dropped because none of their lines is an added line of the diff
   dismissed?: number; // entries dropped because their message says the code follows the rule
   durationMs: number;

@@ -255,7 +255,7 @@ function printHumanReadableResults(results: JudgeResult[], config: AppConfig): v
 function printHelp(): void {
   console.log(`
 Usage: judge [options] [paths...]
-       judge markers [paths...] [--json]   List rule-ignore / rule-todo markers, grouped by rule
+       judge markers [paths...] [--json]   List rule-exception / rule-debt markers, grouped by rule
        judge test [--rules <dir>] [--only <id>] [--json]   Run each rule on its fixtures (<dir>/<id>.fixtures/)
 
 Options:
