@@ -12,7 +12,7 @@ Each `JUDGE.md` file defines an independent AI evaluator in `judge-cli`. The fil
 | `mode` | `'one-shot' \| 'agent'` | No | `'one-shot'` | `one-shot` sees only the text it is given; `agent` may read the repository. See [Agent judges](#agent-judges). |
 | `timeout_seconds` | `number` | No | `30` | Execution timeout in seconds. Must be a positive integer. |
 
-`JUDGE.md` files also accept the rule settings below (`scope`, `severity`, `model`, `budget`, `tools`, `max_turns`).
+`JUDGE.md` files also accept the rule settings below (`scope`, `severity`, `model`, `effort`, `budget`, `tools`, `max_turns`).
 
 ## Minimal Valid `JUDGE.md` Example
 
@@ -63,6 +63,7 @@ A rule is a Markdown file `<dir>/<id>.md`, or a directory `<dir>/<id>/` that hol
 | `stage` | `'commit' \| 'push' \| 'ci'` | No | `'commit'` | The gate the rule runs at. `--stage commit` and `--stage push` run only their own rules and report the others as skipped; `--stage ci`, or no `--stage`, runs every rule. Never derived from the model or budget. |
 | `severity` | `'low' \| 'medium' \| 'high'` | No | `'medium'` | Severity of a violation. |
 | `model` | `string` | No | engine default | Alias (`small`, `medium`, `large`) or an exact model id. |
+| `effort` | `'low' \| 'medium' \| 'high' \| 'xhigh' \| 'max'` | No | engine default | How hard the model thinks. Passed to `claude` as `--effort <level>`, for one-shot and agent rules; without it no flag is passed. `codex` and `gemini` have no effort flag and ignore it. Any other value makes the rule invalid. `--json` records it per rule as `effort`. |
 | `budget` | `string` | No | - | Time and cost caps, e.g. `30s, $0.10` or `2m`. Either part is optional. The time part sets `timeout_seconds`; setting both is an error. |
 | `mode` | `'one-shot' \| 'agent'` | No | `'one-shot'` | Same as for `JUDGE.md`. |
 | `tools` | `string[]` | No | agent: `[Read, Grep, Glob]` | Only with `mode: agent`. Read-only tools only: `Read`, `Grep`, `Glob`. |

@@ -63,6 +63,15 @@ describe('runPlan outcome mapping', () => {
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 30000, tools: [] }));
   });
 
+  it('records the effort the rule ran with, and none when the rule sets none', async () => {
+    run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
+    const thorough = { ...judge, id: 'thorough', effort: 'max' } as Judge;
+
+    const results = await runPlan([planned(), { judge: thorough, context: inputContext, markers: [] }], 'claude');
+
+    expect(results.map((r) => [r.judgeId, r.effort])).toEqual([['srp', undefined], ['thorough', 'max']]);
+  });
+
   it('runs the engine in the repository root of the context', async () => {
     run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
 
@@ -331,6 +340,7 @@ describe('buildEngineRequest', () => {
       mode: undefined,
       cwd: undefined,
       model: undefined,
+      effort: undefined,
       timeoutMs: 45000,
       maxBudgetUsd: undefined,
       tools: [],
@@ -340,13 +350,14 @@ describe('buildEngineRequest', () => {
   });
 
   it('maps the judge engine options onto the request', () => {
-    const judge = { mode: 'agent', timeout_seconds: 60, model: 'small', tools: ['Read'], allow_read: ['../billing/**'], max_budget_usd: 0.5, max_turns: 4 } as Judge;
+    const judge = { mode: 'agent', timeout_seconds: 60, model: 'small', effort: 'high', tools: ['Read'], allow_read: ['../billing/**'], max_budget_usd: 0.5, max_turns: 4 } as Judge;
 
     expect(buildEngineRequest(judge, 'prompt', '/repo')).toEqual({
       prompt: 'prompt',
       mode: 'agent',
       cwd: '/repo',
       model: 'small',
+      effort: 'high',
       timeoutMs: 60000,
       maxBudgetUsd: 0.5,
       tools: ['Read'],

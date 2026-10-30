@@ -183,6 +183,19 @@ describe('validateRule', () => {
     expect(result.errors[0]).toContain('`stage`');
   });
 
+  it('should keep a known effort, and leave effort unset when the rule names none', () => {
+    for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
+      expect(validateRule({ id: 'r', effort }, 'r').data.effort).toBe(effort);
+    }
+    expect(validateRule({ id: 'r' }, 'r').data.effort).toBeUndefined();
+  });
+
+  it('should reject an unknown effort', () => {
+    const result = validateRule({ id: 'r', effort: 'extreme' }, 'r');
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(['error: `effort` must be one of: low, medium, high, xhigh, max']);
+  });
+
   it('should reject non-positive max_turns', () => {
     const result = validateRule({ id: 'r', max_turns: 0 }, 'r');
     expect(result.valid).toBe(false);

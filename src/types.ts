@@ -42,6 +42,7 @@ export interface JudgeResult {
   displayName: string;
   file: string;
   status: JudgeStatus;
+  effort?: string; // the effort the rule ran with; unset when the engine used its default
   issues: Issue[];
   covered?: Issue[]; // findings a marker covers, each with its `covered_by`; not reported
   suppressed?: number; // how many findings markers covered: the length of `covered`

@@ -5,6 +5,7 @@ export interface EngineRequest {
   mode: 'one-shot' | 'agent';
   cwd?: string; // repository root an agent judge explores; one-shot judges read nothing from disk
   model?: string;
+  effort?: string; // passed as it is; the engine's default when unset
   timeoutMs: number;
   maxBudgetUsd?: number;
   tools: string[];

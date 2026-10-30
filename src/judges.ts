@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import os from 'os';
 import matter from 'gray-matter';
-import { validateJudge, validateRule, defaultSettings, ValidationResult, Context, IdSource } from './validator.js';
+import { validateJudge, validateRule, defaultSettings, ValidationResult, Context, Effort, IdSource } from './validator.js';
 import { UsageError } from './config.js';
 import { Stage } from './types.js';
 
@@ -19,6 +19,7 @@ export interface Judge {
   stage: Stage;
   severity: 'low' | 'medium' | 'high';
   model?: string;
+  effort?: Effort;
   tools: string[];
   allow_read: string[]; // directories outside the repo an agent judge may read
   max_turns?: number;

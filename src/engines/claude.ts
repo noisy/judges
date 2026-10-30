@@ -41,6 +41,7 @@ export function buildClaudeArgs(req: EngineRequest): string[] {
   ];
   const model = resolveModel('claude', req.model);
   if (model) args.push('--model', model);
+  if (req.effort) args.push('--effort', req.effort);
   if (req.maxBudgetUsd !== undefined) args.push('--max-budget-usd', String(req.maxBudgetUsd));
   if (req.maxTurns !== undefined) args.push('--max-turns', String(req.maxTurns));
   return args;
