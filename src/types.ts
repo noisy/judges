@@ -44,6 +44,7 @@ export interface JudgeResult {
   issues: Issue[];
   suppressed?: number; // findings dropped because a marker covers them
   outsideDiff?: number; // findings dropped because none of their lines is an added line of the diff
+  dismissed?: number; // entries dropped because their message says the code follows the rule
   durationMs: number;
   costUsd?: number;
   turns?: number;

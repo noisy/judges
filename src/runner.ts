@@ -5,11 +5,13 @@ import { Judge, displayName } from './judges.js';
 import { PlanItem } from './plan.js';
 import { Marker, isCovered } from './markers.js';
 import { dropOutsideDiff } from './diff-lines.js';
+import { dropNonFindings } from './non-findings.js';
 import { SEVERITY_SCORE } from './config.js';
 import { repoRoot } from './files.js';
 import { EvaluationContext, Issue, JudgeEvent, JudgeResult, SupportedEngine } from './types.js';
 
-type JudgeOutcome = Pick<JudgeResult, 'status' | 'issues' | 'suppressed' | 'outsideDiff' | 'error' | 'costUsd' | 'turns' | 'examined'>;
+type JudgeOutcome = Pick<JudgeResult,
+  'status' | 'issues' | 'suppressed' | 'outsideDiff' | 'dismissed' | 'error' | 'costUsd' | 'turns' | 'examined'>;
 export type ProgressListener = (event: JudgeEvent) => void;
 
 export async function runPlan(
@@ -58,6 +60,7 @@ async function runJudge(
     issues: outcome.issues,
     suppressed: outcome.suppressed,
     outsideDiff: outcome.outsideDiff,
+    dismissed: outcome.dismissed,
     durationMs: Date.now() - startedAt,
     costUsd: outcome.costUsd,
     turns: outcome.turns,
@@ -80,10 +83,11 @@ async function evaluateJudge(
   try {
     const prompt = constructPrompt(judge, context, markers);
     const response = await getEngine(engine).run(buildEngineRequest(judge, prompt, context.root ?? repoRoot()));
-    const issues = attributeToRule(judge, parseLLMOutput(response.rawOutput));
+    const { kept: violations, dismissed } = dropNonFindings(parseLLMOutput(response.rawOutput));
+    const issues = attributeToRule(judge, violations);
     const { kept, suppressed } = dropCovered(judge, issues, markers);
     const { kept: inChange, outsideDiff } = dropOldFindings(judge, kept, context);
-    return { status: 'ok', issues: sortBySeverity(inChange), suppressed, outsideDiff, costUsd: response.costUsd,
+    return { status: 'ok', issues: sortBySeverity(inChange), suppressed, outsideDiff, dismissed, costUsd: response.costUsd,
       turns: response.turns, examined: response.examined };
   } catch (error: any) {
     const status = error instanceof TimeoutError ? 'timeout' : 'error';

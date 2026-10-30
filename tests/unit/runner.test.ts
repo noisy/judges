@@ -151,6 +151,19 @@ describe('runPlan with markers', () => {
     expect(result.suppressed).toBe(1);
   });
 
+  it('drops entries that say the code follows the rule and counts them as dismissed', async () => {
+    const issues = [
+      { file: 'a.ts', line: 2, severity: 'low', message: 'The comment explains why. No issue here.' },
+      { file: 'a.ts', line: 3, severity: 'low', message: 'The comment restates the code.' }
+    ];
+    run.mockResolvedValue({ rawOutput: JSON.stringify(issues), durationMs: 5 });
+
+    const [result] = await runPlan([planned()], 'claude');
+
+    expect(result.issues.map((i) => i.message)).toEqual(['The comment restates the code.']);
+    expect(result.dismissed).toBe(1);
+  });
+
   it('reports zero suppressed when nothing is marked', async () => {
     run.mockResolvedValue({ rawOutput: '[]', durationMs: 5 });
 
