@@ -39,6 +39,7 @@ export interface JudgeResult {
   status: JudgeStatus;
   issues: Issue[];
   suppressed?: number; // findings dropped because a marker covers them
+  dismissed?: number; // entries dropped because their message says the code follows the rule
   durationMs: number;
   costUsd?: number;
   turns?: number;
